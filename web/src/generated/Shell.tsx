@@ -14,7 +14,7 @@ export function Shell({ data, onAction }: { data: any; onAction: (name: string) 
         </Row>
         <Text variant="eyebrow">WORKSPACE</Text>
         {data.nav.map((item, i) => (
-          <Link key={i} href={item.href} variant={item.variant}>
+          <Link key={i} href={item.href} variant={item.variant} aria-label={item.title}>
             <Icon name={item.icon} />
             <Text>{item.title}</Text>
           </Link>

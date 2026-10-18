@@ -19,12 +19,16 @@ The dashboard is authored in [AUI source](web/src/screens) and compiled to React
 The original [logo source and provenance](branding/README.md) follow the suite's
 indigo, mint and silver icon family.
 
+![Real published deployment in the My Hosting dashboard](docs/screenshots/publication-live.png)
+
 ## Current development status
 
 Server/API and dashboard sources are implemented and compile. The initial unit
 checks cover archive rejection, log redaction across write boundaries, encrypted
 backup corruption/truncation, role/CSRF/secret visibility and job recovery.
-Windows restricted-worker startup and full runtime acceptance are still being
+Native static publication/previews/rollback, Node publication and filesystem
+isolation, authenticated Caddy reload, and encrypted backup/restore checks pass.
+Public tunnel publishing and the remaining full runtime acceptance are being
 worked through. Suite integration, complete operational acceptance and paired
 releases are not yet complete. Do not install this source checkpoint as a
 production service or expose untrusted builds.
@@ -37,13 +41,23 @@ per-project ACLs and Job Objects are defense in depth, not a VM boundary or a
 claim that untrusted multi-tenant hosting is safe. The implementation fails closed
 if required restrictions cannot be applied or if builds would run as LocalSystem.
 Private state needs a local NTFS directory. Hosted content uses separate origins;
-Caddy's unauthenticated admin API is disabled.
+Caddy's unauthenticated admin API is disabled; private control uses mutual TLS
+on loopback with protected client credentials.
 
 `MyHosting.exe` is the main launcher and contains the dashboard. Caddy and Node
 are additional managed processes. Node is provisioned only for builds/server apps
 that need it. Runtime archives are pinned to official versions and SHA-256 values.
 No Docker or external database is required. Automatic public HTTPS still requires
 valid DNS, reachable ports and successful certificate provisioning.
+
+## Your sites' addresses
+
+The recommended free Workspace tunnel setup automatically publishes sites at
+`my-site-sites.your-domain.com` and previews at
+`deploy-ID--my-site-sites.your-domain.com`. On the owner's connected zone this
+is `my-site-sites.m8e.co.uk`. Other installations use their own domain and
+Cloudflare connection. Optional direct HTTPS supports nested addresses such as
+`my-site.sites.m8e.co.uk`. See [publishing and HTTPS](docs/PUBLISHING.md).
 
 ## Develop locally
 

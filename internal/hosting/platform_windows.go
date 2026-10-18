@@ -3,6 +3,7 @@
 package hosting
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"golang.org/x/sys/windows"
@@ -68,12 +69,19 @@ func setDACL(path, sddl string) error {
 	}
 	return windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil)
 }
+
+var configuredDataOwner string
+
 func privateACL() string {
 	u, e := user.Current()
 	if e != nil {
 		panic(e)
 	}
-	return "D:P(D;OICI;WDWO;;;RC)(A;OICI;FA;;;" + u.Uid + ")(A;OICI;FA;;;SY)"
+	acl := "D:P(D;OICI;WDWO;;;RC)(A;OICI;FA;;;" + u.Uid + ")(A;OICI;FA;;;SY)"
+	if configuredDataOwner != "" && configuredDataOwner != u.Uid {
+		acl += "(A;OICI;FA;;;" + configuredDataOwner + ")"
+	}
+	return acl
 }
 func prepareData(root string) error {
 	if !filepath.IsAbs(root) {
@@ -93,8 +101,51 @@ func prepareData(root string) error {
 	if e := os.MkdirAll(root, 0700); e != nil {
 		return e
 	}
+	marker := filepath.Join(root, ".myhosting-data.json")
+	u, e := user.Current()
+	if e != nil {
+		return e
+	}
+	owner := u.Uid
+	if raw, e := os.ReadFile(marker); e == nil {
+		var saved struct {
+			Schema int    `json:"schema"`
+			Owner  string `json:"owner"`
+		}
+		if json.Unmarshal(raw, &saved) != nil || saved.Schema != 1 {
+			return errors.New("Hosting data marker is invalid; inspect the selected folder")
+		}
+		sd, e := windows.GetNamedSecurityInfo(marker, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION)
+		if e != nil {
+			return e
+		}
+		sid, _, e := sd.Owner()
+		if e != nil {
+			return e
+		}
+		if sid.String() != saved.Owner || (saved.Owner != u.Uid && u.Uid != "S-1-5-18") {
+			return errors.New("This private folder belongs to another Windows account. Use its configured service/owner account or restore an encrypted backup into a new folder")
+		}
+		owner = saved.Owner
+	} else if !os.IsNotExist(e) {
+		return e
+	} else {
+		entries, e := os.ReadDir(root)
+		if e != nil {
+			return e
+		}
+		if len(entries) > 0 {
+			return errors.New("Choose a new empty folder for My Hosting; an existing unrelated data folder cannot be adopted")
+		}
+	}
+	configuredDataOwner = owner
 	if e := setDACL(root, privateACL()); e != nil {
 		return e
+	}
+	if _, e := os.Stat(marker); os.IsNotExist(e) {
+		if e = atomicFile(marker, []byte(encode(map[string]any{"schema": 1, "owner": owner}))); e != nil {
+			return e
+		}
 	}
 	if e := initDirs(root); e != nil {
 		return e
@@ -204,10 +255,56 @@ func allowRuntime(path, pid string) error {
 	return windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION, nil, nil, acl, nil)
 }
 
+// Node realpath() stats each ancestor of its entry point. Permit only ancestor
+// metadata/traversal, with no directory listing, content read, inheritance or write.
+func allowProjectAncestors(root, path, pid string) error {
+	root = filepath.Clean(root)
+	sid, e := windows.StringToSid(projectSID(pid))
+	if e != nil {
+		return e
+	}
+	for p := filepath.Dir(path); ; p = filepath.Dir(p) {
+		rel, e := filepath.Rel(root, p)
+		if e != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return errors.New("Worker ancestor escaped its private data root")
+		}
+		st, e := os.Lstat(p)
+		if e != nil {
+			return e
+		}
+		if st.Mode()&os.ModeSymlink != 0 {
+			return errors.New("Worker ancestor is linked")
+		}
+		sd, e := windows.GetNamedSecurityInfo(p, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+		if e != nil {
+			return e
+		}
+		old, _, e := sd.DACL()
+		if e != nil {
+			return e
+		}
+		entry := windows.EXPLICIT_ACCESS{AccessPermissions: windows.FILE_READ_ATTRIBUTES | windows.FILE_TRAVERSE | windows.SYNCHRONIZE, AccessMode: windows.GRANT_ACCESS, Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID, TrusteeType: windows.TRUSTEE_IS_UNKNOWN, TrusteeValue: windows.TrusteeValueFromSID(sid)}}
+		acl, e := windows.ACLFromEntries([]windows.EXPLICIT_ACCESS{entry}, old)
+		if e != nil {
+			return e
+		}
+		if e = windows.SetNamedSecurityInfo(p, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION, nil, nil, acl, nil); e != nil {
+			return e
+		}
+		if p == root {
+			break
+		}
+	}
+	return nil
+}
+
 type ProcessJob struct {
-	handle windows.Handle
-	cmd    *exec.Cmd
-	once   sync.Once
+	handle   windows.Handle
+	cmd      *exec.Cmd
+	once     sync.Once
+	pid      uint32
+	waitDone chan struct{}
+	waitErr  error
 }
 
 func (j *ProcessJob) Close() {
@@ -297,21 +394,28 @@ func startProcess(cmd *exec.Cmd, pid string, memoryMB int, restricted bool) (*Pr
 		}
 		rc, _ := windows.StringToSid("S-1-5-12")
 		users, _ := windows.StringToSid("S-1-5-32-545")
+		world, _ := windows.StringToSid("S-1-1-0")
 		admin, _ := windows.StringToSid("S-1-5-32-544")
-		restrict := []windows.SIDAndAttributes{{Sid: project}, {Sid: rc}, {Sid: users}}
+		// Windows loader/session objects include Everyone grants. Host private
+		// data deliberately has no Everyone/Users grant, and every project has
+		// its own SID. Mandatory low integrity still prevents writes to normal
+		// host objects, including publicly readable runtime/program folders.
+		restrict := []windows.SIDAndAttributes{{Sid: project}, {Sid: rc}, {Sid: users}, {Sid: world}}
 		// Windows process initialization opens the session's window station.
 		// Keep its logon SID for that object, while private data ACLs grant only
 		// the account/project SIDs. Low integrity and job UI restrictions remain.
 		groups, e := current.GetTokenGroups()
-		if e != nil { return fail(e) }
+		if e != nil {
+			return fail(e)
+		}
 		for _, g := range groups.AllGroups() {
-			if g.Attributes & windows.SE_GROUP_LOGON_ID == windows.SE_GROUP_LOGON_ID {
-				restrict = append(restrict, windows.SIDAndAttributes{Sid:g.Sid})
+			if g.Attributes&windows.SE_GROUP_LOGON_ID == windows.SE_GROUP_LOGON_ID {
+				restrict = append(restrict, windows.SIDAndAttributes{Sid: g.Sid})
 			}
 		}
 		disabled := windows.SIDAndAttributes{Sid: admin}
 		var original windows.Token
-		if e = windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY|windows.TOKEN_ASSIGN_PRIMARY|windows.TOKEN_ADJUST_DEFAULT, &original); e != nil {
+		if e = windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY|windows.TOKEN_ASSIGN_PRIMARY|windows.TOKEN_ADJUST_DEFAULT|windows.WRITE_DAC|windows.READ_CONTROL, &original); e != nil {
 			return fail(e)
 		}
 		defer original.Close()
@@ -321,13 +425,38 @@ func startProcess(cmd *exec.Cmd, pid string, memoryMB int, restricted bool) (*Pr
 			return fail(callErr)
 		}
 		defer token.Close()
+		// Kernel objects created by a restricted process need an allow entry
+		// for its project SID as well as the normal user. Copying the caller's
+		// default DACL would prevent the child from opening its own objects.
+		u, e := user.Current()
+		if e != nil {
+			return fail(e)
+		}
+		defaultSD, e := windows.SecurityDescriptorFromString("D:P(A;;GA;;;" + u.Uid + ")(A;;GA;;;SY)(A;;GA;;;" + projectSID(pid) + ")")
+		if e != nil {
+			return fail(e)
+		}
+		defaultACL, _, e := defaultSD.DACL()
+		if e != nil {
+			return fail(e)
+		}
+		defaultInfo := struct{ ACL *windows.ACL }{defaultACL}
+		if e = windows.SetTokenInformation(token, windows.TokenDefaultDacl, (*byte)(unsafe.Pointer(&defaultInfo)), uint32(unsafe.Sizeof(defaultInfo))); e != nil {
+			return fail(e)
+		}
+		if e = windows.SetSecurityInfo(windows.Handle(token), windows.SE_KERNEL_OBJECT, windows.DACL_SECURITY_INFORMATION, nil, nil, defaultACL, nil); e != nil {
+			return fail(e)
+		}
 		low, _ := windows.StringToSid("S-1-16-4096")
 		label := windows.Tokenmandatorylabel{Label: windows.SIDAndAttributes{Sid: low, Attributes: windows.SE_GROUP_INTEGRITY}}
 		if e = windows.SetTokenInformation(token, windows.TokenIntegrityLevel, (*byte)(unsafe.Pointer(&label)), uint32(unsafe.Sizeof(label))+uint32(low.Len())); e != nil {
 			return fail(e)
 		}
 		cmd.SysProcAttr.Token = syscall.Token(token)
-		ui := uint32(0xff)
+		// The worker already has a private low-integrity desktop. Disallow
+		// clipboard/system/global-atom operations without blocking its initial
+		// desktop handle during Windows DLL initialization.
+		ui := uint32(0xbe)
 		if _, e = windows.SetInformationJobObject(h, windows.JobObjectBasicUIRestrictions, uintptr(unsafe.Pointer(&ui)), 4); e != nil {
 			return fail(e)
 		}
@@ -336,40 +465,9 @@ func startProcess(cmd *exec.Cmd, pid string, memoryMB int, restricted bool) (*Pr
 			return fail(e)
 		}
 	}
-	if e = cmd.Start(); e != nil {
-		return fail(fmt.Errorf("Start managed process: %w", e))
-	}
-	ph, e := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(cmd.Process.Pid))
-	if e != nil {
-		return fail(e)
-	}
-	e = windows.AssignProcessToJobObject(h, ph)
-	windows.CloseHandle(ph)
-	if e != nil {
-		return fail(e)
-	}
-	snap, e := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
-	if e != nil {
-		return fail(e)
-	}
-	defer windows.CloseHandle(snap)
-	entry := windows.ThreadEntry32{Size: uint32(unsafe.Sizeof(windows.ThreadEntry32{}))}
-	for e = windows.Thread32First(snap, &entry); e == nil; e = windows.Thread32Next(snap, &entry) {
-		if entry.OwnerProcessID == uint32(cmd.Process.Pid) {
-			th, e := windows.OpenThread(windows.THREAD_SUSPEND_RESUME, false, entry.ThreadID)
-			if e != nil {
-				return fail(e)
-			}
-			_, e = windows.ResumeThread(th)
-			windows.CloseHandle(th)
-			if e != nil {
-				return fail(e)
-			}
-			return j, nil
-		}
-	}
-	return fail(errors.New("Could not resume managed process"))
+	return nativeStart(cmd, j, token, restricted, pid)
 }
+
 func openBrowser(raw string) {
 	c := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", raw)
 	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
@@ -378,6 +476,7 @@ func openBrowser(raw string) {
 func safeEnvironment(root, node string, port int, vars map[string]string) []string {
 	system := os.Getenv("SystemRoot")
 	out := []string{"SystemRoot=" + system, "WINDIR=" + system, "PATH=" + node + ";" + filepath.Join(system, "System32"), "TEMP=" + filepath.Join(root, "tmp"), "TMP=" + filepath.Join(root, "tmp"), "HOME=" + root, "USERPROFILE=" + root, "APPDATA=" + filepath.Join(root, "tmp"), "LOCALAPPDATA=" + filepath.Join(root, "tmp"), "npm_config_cache=" + filepath.Join(root, ".npm-cache"), "npm_config_update_notifier=false", "NODE_ENV=production", fmt.Sprint("PORT=", port), "HOST=127.0.0.1", "HOSTNAME=127.0.0.1"}
+	out = append(out, "NEXT_TELEMETRY_DISABLED=1", "NUXT_TELEMETRY_DISABLED=1", "DO_NOT_TRACK=1", "npm_config_audit=false", "npm_config_fund=false")
 	for k, v := range vars {
 		if strings.ContainsAny(k, "=\x00") || strings.ContainsRune(v, 0) {
 			continue

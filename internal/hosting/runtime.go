@@ -37,9 +37,11 @@ type runtimeReceipt struct {
 	Hashes map[string]string `json:"hashes"`
 }
 type runtimeManager struct {
-	mu     sync.Mutex
-	root   string
-	status map[string]string
+	mu       sync.Mutex
+	gateOnce sync.Once
+	gate     chan struct{}
+	root     string
+	status   map[string]string
 }
 
 func hashFile(p string) (string, error) {
@@ -78,8 +80,13 @@ func (m *runtimeManager) ready(key string) error {
 	return nil
 }
 func (m *runtimeManager) provision(ctx context.Context, key, offline string, report func(string)) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.gateOnce.Do(func() { m.gate = make(chan struct{}, 1) })
+	select {
+	case m.gate <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-m.gate }()
 	pin, ok := runtimePins[key]
 	if !ok {
 		return errors.New("Unknown runtime")
@@ -90,9 +97,15 @@ func (m *runtimeManager) provision(ctx context.Context, key, offline string, rep
 	if report == nil {
 		report = func(string) {}
 	}
+	originalReport := report
+	report = func(message string) { m.mu.Lock(); m.status[key] = message; m.mu.Unlock(); originalReport(message) }
 	report("Preparing " + key + " " + pin.Version)
+	m.mu.Lock()
 	m.status[key] = "downloading"
+	m.mu.Unlock()
 	defer func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
 		if m.ready(key) == nil {
 			m.status[key] = "ready"
 		} else {

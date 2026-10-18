@@ -310,7 +310,7 @@ func TestRestrictedProcessCannotReadOrModifyHostData(t *testing.T) {
 		t.Fatal("restricted worker failed to start:", e)
 	}
 	defer j.Close()
-	if e = cmd.Wait(); e != nil {
+	if e = j.Wait(); e != nil {
 		t.Fatalf("restricted worker probe: %v: %s", e, out.String())
 	}
 	raw, e := os.ReadFile(filepath.Join(own, "result.txt"))

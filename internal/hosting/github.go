@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -132,13 +133,63 @@ func (a *App) resolveSource(ctx context.Context, p Project, branch, sha string) 
 }
 func (a *App) fetchSource(ctx context.Context, d *Deploy, report func(string)) error {
 	if d.Source == "zip" {
-		sum, e := hashFile(a.sourcePath(*d))
+		sum, e := hashFile(a.sourceForRead(*d))
 		if e != nil || sum != d.SourceHash {
 			return errors.New("Uploaded source checksum does not match the queued deployment")
 		}
 		return nil
 	}
+	if validID.MatchString(d.Parent) {
+		parent, e := a.store.deploy(d.Parent)
+		if e == nil && parent.ProjectID == d.ProjectID && parent.Commit == d.Commit && parent.SourceHash != "" {
+			previous := a.sourceForRead(parent)
+			sum, e := hashFile(previous)
+			if e == nil && sum == parent.SourceHash {
+				in, e := os.Open(previous)
+				if e != nil {
+					return e
+				}
+				defer in.Close()
+				out, e := os.OpenFile(a.sourcePath(*d), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+				if e != nil {
+					return e
+				}
+				_, e = io.Copy(out, in)
+				ce := out.Close()
+				if e != nil {
+					return e
+				}
+				if ce != nil {
+					return ce
+				}
+				d.SourceHash = sum
+				return a.store.saveDeploy(*d)
+			}
+		}
+	}
 	p := d.Snapshot
+	var resolved, author, message string
+	var resolveError error
+	for attempt := 0; attempt < 3; attempt++ {
+		resolved, author, message, resolveError = a.resolveSource(ctx, p, d.Branch, d.Commit)
+		if resolveError == nil {
+			break
+		}
+		if attempt == 2 {
+			return resolveError
+		}
+		report("Source verification is unavailable; retrying safely before downloading")
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(attempt+1) * time.Second):
+		}
+	}
+	if resolved != d.Commit {
+		return errors.New("Source verification resolved an unexpected commit")
+	}
+	d.Author = author
+	d.Message = message
 	report("Downloading immutable GitHub source " + d.Commit)
 	token, _ := a.getSecret(p.ID, "GITHUB_TOKEN", "integration")
 	dest := a.sourcePath(*d)
@@ -157,7 +208,26 @@ func (a *App) sourcePath(d Deploy) string {
 	if d.Source == "zip" {
 		ext = ".zip"
 	}
-	return filepath.Join(a.cfg.Data, "cache", "source-"+d.ID+ext)
+	return filepath.Join(a.cfg.Data, "projects", d.ProjectID, "sources", "source-"+d.ID+ext)
+}
+
+func (a *App) sourceForRead(d Deploy) string {
+	original := a.sourcePath(d)
+	for n := 0; n < 100; n++ {
+		p := a.sourcePath(d)
+		if _, e := os.Stat(p); e == nil {
+			return p
+		}
+		if !validID.MatchString(d.Parent) {
+			break
+		}
+		parent, e := a.store.deploy(d.Parent)
+		if e != nil || parent.ProjectID != d.ProjectID {
+			break
+		}
+		d = parent
+	}
+	return original
 }
 func (a *App) githubAPI(w http.ResponseWriter, r *http.Request, s Session, p Project, tail []string) {
 	if r.Method == "GET" {
@@ -165,6 +235,14 @@ func (a *App) githubAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 			var result any
 			endpoint := ""
 			switch tail[0] {
+			case "detect":
+				result, e := a.detectGitHub(r.Context(), p)
+				if e != nil {
+					fail(w, 400, e)
+					return
+				}
+				jsonOut(w, 200, result)
+				return
 			case "branches":
 				endpoint = "/branches?per_page=100"
 			case "commits":
@@ -301,11 +379,18 @@ func (a *App) webhook(w http.ResponseWriter, r *http.Request, pid string) {
 	if branch != p.Branch {
 		environment = "preview"
 	}
-	d, e := a.queueGit(r.Context(), p, branch, event.After, environment, "webhook", digest(body), "github-webhook")
+	if !validSHA.MatchString(event.After) || event.After == strings.Repeat("0", 40) {
+		fail(w, 400, errors.New("Webhook commit is invalid"))
+		return
+	}
+	// Persist the authenticated event before contacting GitHub. Transient
+	// provider failures are handled by the queued job, not lost callbacks.
+	d, e := a.queued(p, "github", branch, event.After, environment, "build", "", digest(body), "github-webhook")
 	if e != nil {
 		fail(w, 400, e)
 		return
 	}
+	a.notify()
 	jsonOut(w, 202, d)
 }
 

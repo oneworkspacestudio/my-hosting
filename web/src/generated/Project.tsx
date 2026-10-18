@@ -127,11 +127,15 @@ export function Project({ data, onAction }: { data: any; onAction: (name: string
             <Text variant="muted">Changes apply to new builds. Retry uses the original deployment's source and saved configuration; rebuild uses these current settings.</Text>
             <Field label="GitHub repository"><Input name="repository" /></Field>
             <Field label="Production branch"><Input name="branch" /></Field>
+            {data.canAdmin && (
+              <Button variant="secondary" onClick={() => onAction("detectFramework")}>Detect framework from repository</Button>
+            )}
             <Field label="Adapter"><Select name="adapter" options={data.adapterOptions} /></Field>
             <Field label="Node major"><Select name="nodeMajor" options={data.nodeOptions} /></Field>
             <Field label="Install command · JSON arguments"><Input name="install" /></Field>
             <Field label="Build command · JSON arguments"><Input name="build" /></Field>
             <Field label="Start command · JSON arguments"><Input name="start" /></Field>
+            <Field label="Base directory within the repository"><Input name="baseDirectory" placeholder=". or a package folder" /></Field>
             <Field label="Static output directory"><Input name="output" /></Field>
             <Field label="Health path"><Input name="healthPath" /></Field>
             <Grid columns={3}>

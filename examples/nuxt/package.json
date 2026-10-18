@@ -1,0 +1,1 @@
+{"name":"my-hosting-nuxt-acceptance","version":"1.0.0","private":true,"scripts":{"build":"nuxt build"},"dependencies":{"nuxt":"4.6.2"}}

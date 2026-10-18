@@ -41,8 +41,11 @@ func (a *App) queued(p Project, source, branch, sha, environment, action, parent
 			return d, nil
 		}
 	}
+	if e := os.MkdirAll(filepath.Join(a.cfg.Data, "projects", p.ID, "sources"), 0700); e != nil {
+		return Deploy{}, e
+	}
 	var count int
-	_ = a.store.db.QueryRow("SELECT COUNT(*) FROM deployments WHERE state IN ('queued','building','publishing')").Scan(&count)
+	_ = a.store.db.QueryRow("SELECT COUNT(*) FROM deployments WHERE state IN ('uploading','queued','building','publishing')").Scan(&count)
 	if count >= 100 {
 		return Deploy{}, errors.New("Deployment queue is full; wait for a job or cancel queued work")
 	}
@@ -100,7 +103,7 @@ func (a *App) queueGit(ctx context.Context, p Project, branch, sha, environment,
 	return d, e
 }
 func (a *App) recoverJobs() error {
-	rows, e := a.store.db.Query("SELECT detail FROM deployments WHERE state IN ('building','publishing')")
+	rows, e := a.store.db.Query("SELECT detail FROM deployments WHERE state IN ('uploading','building','publishing')")
 	if e != nil {
 		return e
 	}
@@ -248,13 +251,18 @@ func (a *App) execute(d Deploy) {
 			}
 			report("Extracting verified source (links and traversal paths are rejected)")
 			if d.Source == "zip" {
-				e = extractZIP(a.sourcePath(d), work, false)
+				e = extractZIP(a.sourceForRead(d), work, false)
 			} else {
-				e = extractTar(a.sourcePath(d), work)
+				e = extractTar(a.sourceForRead(d), work)
 			}
 			if e != nil {
 				return e
 			}
+			baseDir, e := insideRelease(work, sourceBase(d.Snapshot))
+			if e != nil {
+				return errors.New("The configured base directory is missing or unsafe")
+			}
+			report("Source adapter: " + detectLocal(baseDir) + "; selected adapter: " + d.Snapshot.Adapter)
 			needsNode := d.Snapshot.Adapter != "static" || len(d.Snapshot.Install) > 0 || len(d.Snapshot.Build) > 0
 			if needsNode {
 				key := fmt.Sprint("node", d.Snapshot.NodeMajor)
@@ -272,16 +280,21 @@ func (a *App) execute(d Deploy) {
 						continue
 					}
 					report(step.name + ": " + encode(step.args))
-					if e = a.runBuild(ctx, d, work, step.args, env, logger); e != nil {
+					if e = a.runBuild(ctx, d, baseDir, step.args, env, logger); e != nil {
 						return fmt.Errorf("%s failed: %w", step.name, e)
 					}
+				}
+			}
+			if d.Snapshot.Adapter == "next" {
+				if e = prepareNextOutput(baseDir); e != nil {
+					return e
 				}
 			}
 			if _, e = treeSize(work); e != nil {
 				return e
 			}
 			if d.Snapshot.Adapter == "static" {
-				output, e := insideRelease(work, d.Snapshot.Output)
+				output, e := insideRelease(baseDir, d.Snapshot.Output)
 				if e != nil {
 					return fmt.Errorf("Build output %s is missing or unsafe", d.Snapshot.Output)
 				}
@@ -326,8 +339,24 @@ func (a *App) execute(d Deploy) {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		fallback, e := a.routing(nil)
+		if e != nil {
+			return e
+		}
+		if e = a.ensureHostedRoute(ctx, d); e != nil {
+			return e
+		}
 		if e = a.reloadRoutes(ctx, &d); e != nil {
 			return e
+		}
+		if a.cfg.SiteCFToken != "" && a.settings().Public && a.settings().Transport == "tunnel" {
+			publicCtx, publicCancel := context.WithTimeout(ctx, 90*time.Second)
+			e = waitPublicSite(publicCtx, a.deployURL(d)+d.Snapshot.HealthPath, d.ID, report)
+			publicCancel()
+			if e != nil {
+				_ = a.applyCaddyConfig(context.Background(), fallback)
+				return errors.New("The public HTTPS address is not ready. Check DNS/tunnel status; the prior release is retained")
+			}
 		}
 		d.State = "published"
 		d.Finished = now()
@@ -337,16 +366,10 @@ func (a *App) execute(d Deploy) {
 			return e
 		}
 		previous := p.Live
-		if d.Environment == "production" {
-			p.Live = d.ID
-			if e = a.store.saveProject(p); e != nil {
-				return e
-			}
-		}
-		if e = a.store.saveDeploy(d); e != nil {
+		if e = a.store.publish(d, p, previous); e != nil {
+			_ = a.applyCaddyConfig(context.Background(), fallback)
 			return e
 		}
-		_ = a.store.audit("scheduler", d.ProjectID, "deploy.published", map[string]string{"deploy": d.ID, "previous": previous, "action": d.Action, "commit": d.Commit})
 		if previous != "" && previous != d.ID && d.Environment == "production" {
 			a.stopNode(previous)
 		}
@@ -370,8 +393,14 @@ func (a *App) execute(d Deploy) {
 	}
 }
 func (a *App) runBuild(ctx context.Context, d Deploy, work string, args []string, env map[string]string, out io.Writer) error {
+	if e := allowProjectAncestors(a.cfg.Data, work, d.ProjectID); e != nil {
+		return e
+	}
 	key := fmt.Sprint("node", d.Snapshot.NodeMajor)
 	runtime := a.runtime.path(key)
+	if e := allowProjectAncestors(a.cfg.Data, runtime, d.ProjectID); e != nil {
+		return e
+	}
 	argv := append([]string(nil), args...)
 	if argv[0] == "npm" {
 		argv = append([]string{filepath.Join(runtime, "node_modules", "npm", "bin", "npm-cli.js")}, argv[1:]...)
@@ -380,8 +409,21 @@ func (a *App) runBuild(ctx context.Context, d Deploy, work string, args []string
 	}
 	cmd := exec.Command(filepath.Join(runtime, "node.exe"), argv...)
 	cmd.Dir = work
-	cmd.Env = safeEnvironment(work, runtime, 0, env)
-	cmd.Env = append(cmd.Env, "NODE_ENV=development")
+	variable := filepath.Join(a.cfg.Data, "projects", d.ProjectID, "var")
+	if e := sandboxDir(variable, d.ProjectID); e != nil {
+		return e
+	}
+	if e := os.MkdirAll(filepath.Join(variable, "tmp"), 0700); e != nil {
+		return e
+	}
+	cmd.Env = safeEnvironment(variable, runtime, 0, env)
+	if len(args) > 1 && args[0] == "npm" && (args[1] == "ci" || args[1] == "install") {
+		for i, value := range cmd.Env {
+			if strings.HasPrefix(value, "NODE_ENV=") {
+				cmd.Env[i] = "NODE_ENV=development"
+			}
+		}
+	}
 	cmd.Stdout = out
 	cmd.Stderr = out
 	j, e := startProcess(cmd, d.ProjectID, d.Snapshot.MemoryMB, true)
@@ -390,7 +432,7 @@ func (a *App) runBuild(ctx context.Context, d Deploy, work string, args []string
 	}
 	defer j.Close()
 	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
+	go func() { done <- j.Wait() }()
 	timer := time.NewTicker(time.Second)
 	defer timer.Stop()
 	for {
@@ -402,7 +444,7 @@ func (a *App) runBuild(ctx context.Context, d Deploy, work string, args []string
 			<-done
 			return ctx.Err()
 		case <-timer.C:
-			bytes, e := treeSize(work)
+			bytes, e := treeSize(a.workspace(d))
 			if e != nil || bytes > int64(d.Snapshot.DiskMB)<<20 {
 				j.Close()
 				<-done
@@ -507,6 +549,11 @@ func (a *App) deployAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 			fail(w, 500, dbError(e))
 			return
 		}
+		for i := range ds {
+			if ds[i].State == "published" {
+				ds[i].URL = a.deployURL(ds[i])
+			}
+		}
 		jsonOut(w, 200, map[string]any{"deployments": ds, "offset": offset, "pageSize": 30})
 		return
 	}
@@ -591,6 +638,9 @@ func (a *App) deployAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 		return
 	}
 	if len(tail) == 1 && r.Method == "GET" {
+		if d.State == "published" {
+			d.URL = a.deployURL(d)
+		}
 		jsonOut(w, 200, d)
 		return
 	}
@@ -664,7 +714,7 @@ func (a *App) deployAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 			return
 		}
 		if d.Source == "zip" {
-			in, e := os.Open(a.sourcePath(d))
+			in, e := os.Open(a.sourceForRead(d))
 			if e != nil {
 				fail(w, 409, errors.New("The source ZIP is no longer retained; upload it again"))
 				return

@@ -18,7 +18,8 @@ Page Create
         Input name=name placeholder="My lovely website" required=true
       Field label="Site name"
         Input name=slug placeholder="my-lovely-website" required=true
-      Text variant=caption "Lowercase letters, numbers and hyphens. This forms your permanent local site address."
+      Text variant=caption "Lowercase letters, numbers and hyphens. Your site name stays the same across deployments."
+      Text variant=caption $suggestedSiteURL
       Field label="GitHub repository (optional)"
         Input name=repository placeholder="owner/repository"
       Field label="Production branch"
@@ -35,6 +36,8 @@ Page Create
         Input name=install placeholder="JSON arguments, for example npm ci"
       Field label="Build command · JSON argument array"
         Input name=build placeholder="JSON arguments for your build script"
+      Field label="Base directory within the repository"
+        Input name=baseDirectory placeholder=". or a package folder"
       Field label="Static output directory"
         Input name=output placeholder="dist or . for an uploaded site root"
       Field label="Start command · generic Node adapter"

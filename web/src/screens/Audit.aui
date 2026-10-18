@@ -1,0 +1,14 @@
+Page Audit
+  Row variant=page-header
+    Stack gap=sm
+      Text variant=eyebrow "WORKSPACE SECURITY"
+      Heading level=1 "Audit trail"
+      Text variant=muted "The latest 100 append-only Hosting events."
+  Alert tone=info "Events have a SHA-256 chain and cannot be edited or deleted through the API. Administrators with direct database access remain trusted."
+  For each=$audit
+    Card variant=event
+      Row
+        Badge tone=muted $item.action
+        Text variant=caption $item.at
+      Text variant=code $item.summary
+

@@ -1,0 +1,17 @@
+Page Setup
+  Card variant=login
+    Image src=$logo width=76 height=76 alt="My Hosting"
+    Text variant=eyebrow "WELCOME HOME"
+    Heading level=1 "Your hosting starts here."
+    Text variant=muted "Create the standalone administrator. This private setup link works once, on this installation."
+    If condition=$error
+      Alert tone=error $error
+    Field label="Email address"
+      Input name=setupEmail type=email autoComplete=username
+    Field label="Password · at least 8 characters"
+      Input name=setupPassword type=password autoComplete=new-password
+    Field label="Confirm password"
+      Input name=setupConfirm type=password autoComplete=new-password
+    Button action=bootstrap "Create administrator & open Hosting"
+    Text variant=caption "Workspace installations connect through MyAccounts automatically and do not create another password."
+

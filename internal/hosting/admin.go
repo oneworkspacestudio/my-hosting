@@ -255,8 +255,8 @@ func (a *App) domainAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 			return
 		}
 		in.Host = strings.ToLower(strings.TrimSpace(in.Host))
-		if !validDomain(in.Host) {
-			fail(w, 400, errors.New("Enter a public hostname such as app.example.com, without a scheme, path or port"))
+		if !validDomain(in.Host) || a.reservedSiteDomain(in.Host) {
+			fail(w, 400, errors.New("Enter a separate custom hostname; managed site addresses and dashboard/identity hostnames cannot be reassigned"))
 			return
 		}
 		var existing string
@@ -329,6 +329,24 @@ func (a *App) domainAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 	http.NotFound(w, r)
 }
 func (a *App) metricsAPI(w http.ResponseWriter, r *http.Request, s Session, p Project) {
+	hosts := map[string]bool{p.Slug + ".localhost": true}
+	rows, e := a.store.db.Query("SELECT detail FROM deployments WHERE project_id=? AND state='published'", p.ID)
+	if e == nil {
+		for rows.Next() {
+			var raw string
+			var d Deploy
+			if rows.Scan(&raw) == nil && json.Unmarshal([]byte(raw), &d) == nil {
+				hosts[d.Snapshot.SlugHostLocal(d)] = true
+				hosts[a.siteHost(d)] = true
+			}
+		}
+		rows.Close()
+	}
+	if custom, e := a.verifiedDomains(p.ID); e == nil {
+		for _, host := range custom {
+			hosts[host] = true
+		}
+	}
 	f, e := os.Open(filepath.Join(a.cfg.Data, "logs", "access.json"))
 	count, errorsCount := 0, 0
 	if e == nil {
@@ -344,7 +362,14 @@ func (a *App) metricsAPI(w http.ResponseWriter, r *http.Request, s Session, p Pr
 					Host string `json:"host"`
 				} `json:"request"`
 			}
-			if json.Unmarshal([]byte(line), &item) == nil && strings.HasPrefix(item.Request.Host, p.Slug+".") {
+			if json.Unmarshal([]byte(line), &item) != nil {
+				continue
+			}
+			host := strings.ToLower(item.Request.Host)
+			if name, _, err := net.SplitHostPort(host); err == nil {
+				host = name
+			}
+			if hosts[strings.TrimSuffix(host, ".")] {
 				count++
 				if item.Status >= 500 {
 					errorsCount++

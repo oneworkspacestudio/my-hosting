@@ -87,6 +87,8 @@ Page Project
         Input name=repository
       Field label="Production branch"
         Input name=branch
+      If condition=$canAdmin
+        Button variant=secondary action=detectFramework "Detect framework from repository"
       Field label="Adapter"
         Select name=adapter options=$adapterOptions
       Field label="Node major"
@@ -97,6 +99,8 @@ Page Project
         Input name=build
       Field label="Start command · JSON arguments"
         Input name=start
+      Field label="Base directory within the repository"
+        Input name=baseDirectory placeholder=". or a package folder"
       Field label="Static output directory"
         Input name=output
       Field label="Health path"

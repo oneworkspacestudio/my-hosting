@@ -25,6 +25,7 @@ func openStore(root string) (*Store, error) {
 	schema := `PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=10000;
  CREATE TABLE IF NOT EXISTS schema_version(version INTEGER NOT NULL); INSERT INTO schema_version SELECT 1 WHERE NOT EXISTS(SELECT 1 FROM schema_version);
  CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,issuer TEXT NOT NULL,subject TEXT NOT NULL,name TEXT NOT NULL,email TEXT NOT NULL,role TEXT NOT NULL,password BLOB,UNIQUE(issuer,subject));
+ CREATE UNIQUE INDEX IF NOT EXISTS users_single_owner ON users((1)) WHERE role='owner';
  CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),csrf TEXT NOT NULL,expires TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,slug TEXT UNIQUE NOT NULL,config TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS members(project_id TEXT NOT NULL REFERENCES projects(id),user_id TEXT NOT NULL REFERENCES users(id),role TEXT NOT NULL,PRIMARY KEY(project_id,user_id));
@@ -73,6 +74,40 @@ func (s *Store) deploy(did string) (Deploy, error) {
 func (s *Store) saveDeploy(d Deploy) error {
 	_, e := s.db.Exec("UPDATE deployments SET state=?,detail=? WHERE id=?", d.State, encode(d), d.ID)
 	return e
+}
+
+// Publish the traffic target, terminal job state and audit event in one SQLite
+// transaction. A restart must never find a live pointer to a half-saved job.
+func (s *Store) publish(d Deploy, p Project, previous string) error {
+	s.auditMu.Lock()
+	defer s.auditMu.Unlock()
+	tx, e := s.db.Begin()
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback()
+	if d.Environment == "production" {
+		p.Live = d.ID
+		p.Role = ""
+		if _, e = tx.Exec("UPDATE projects SET config=? WHERE id=?", encode(p), p.ID); e != nil {
+			return e
+		}
+	}
+	if _, e = tx.Exec("UPDATE deployments SET state=?,detail=? WHERE id=?", d.State, encode(d), d.ID); e != nil {
+		return e
+	}
+	var prev string
+	e = tx.QueryRow("SELECT hash FROM audit ORDER BY seq DESC LIMIT 1").Scan(&prev)
+	if e != nil && e != sql.ErrNoRows {
+		return e
+	}
+	at := now()
+	body := encode(map[string]string{"deploy": d.ID, "previous": previous, "action": d.Action, "commit": d.Commit})
+	h := digest([]byte(encode([]string{prev, at, "scheduler", d.ProjectID, "deploy.published", body})))
+	if _, e = tx.Exec("INSERT INTO audit(at,actor,project_id,action,detail,previous,hash) VALUES(?,?,?,?,?,?,?)", at, "scheduler", d.ProjectID, "deploy.published", body, prev, h); e != nil {
+		return e
+	}
+	return tx.Commit()
 }
 func (s *Store) audit(actor, pid, action string, detail any) error {
 	s.auditMu.Lock()

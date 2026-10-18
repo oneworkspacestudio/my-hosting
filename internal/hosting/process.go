@@ -49,18 +49,30 @@ func (a *App) startNode(ctx context.Context, d *Deploy, env map[string]string, r
 	if e := allowRuntime(runtime, d.ProjectID); e != nil {
 		return e
 	}
+	if e := allowProjectAncestors(a.cfg.Data, runtime, d.ProjectID); e != nil {
+		return e
+	}
 	root := a.releaseRoot(*d)
-	cwd := root
+	if e := freezeArtifact(root, d.ProjectID); e != nil {
+		return e
+	}
+	cwd, e := insideRelease(root, sourceBase(d.Snapshot))
+	if e != nil {
+		return e
+	}
+	if e = allowProjectAncestors(a.cfg.Data, cwd, d.ProjectID); e != nil {
+		return e
+	}
 	args := append([]string(nil), d.Snapshot.Start...)
 	switch d.Snapshot.Adapter {
 	case "next":
-		cwd = filepath.Join(root, ".next", "standalone")
-		if _, e := insideRelease(root, ".next/standalone/server.js"); e != nil {
+		cwd = filepath.Join(root, filepath.FromSlash(sourceBase(d.Snapshot)), ".next", "standalone")
+		if _, e := insideRelease(root, pathFor(d.Snapshot, ".next/standalone/server.js")); e != nil {
 			return errors.New("Next.js needs output:'standalone' and a successful build; .next/standalone/server.js is missing")
 		}
 		args = []string{"node", "server.js"}
 	case "nuxt":
-		if _, e := insideRelease(root, ".output/server/index.mjs"); e != nil {
+		if _, e := insideRelease(root, pathFor(d.Snapshot, ".output/server/index.mjs")); e != nil {
 			return errors.New("Nuxt needs the Nitro node-server preset; .output/server/index.mjs is missing")
 		}
 		args = []string{"node", ".output/server/index.mjs"}
@@ -132,7 +144,7 @@ func (a *App) startNode(ctx context.Context, d *Deploy, env map[string]string, r
 			}
 			p.mu.Lock()
 			p.job = j
-			p.pid = cmd.Process.Pid
+			p.pid = j.PID()
 			p.state = "running"
 			p.mu.Unlock()
 			if first {
@@ -140,7 +152,7 @@ func (a *App) startNode(ctx context.Context, d *Deploy, env map[string]string, r
 				first = false
 			}
 			wait := make(chan error, 1)
-			go func() { wait <- cmd.Wait() }()
+			go func() { wait <- j.Wait() }()
 			select {
 			case <-processCtx.Done():
 				j.Close()
@@ -252,17 +264,24 @@ func (a *App) supervise() {
 			return
 		case <-t.C:
 		}
-		if a.runtime.ready("caddy") != nil {
-			continue
-		}
-		a.processMu.Lock()
-		caddy := a.caddy
-		a.processMu.Unlock()
-		if caddy == nil {
-			a.publishMu.Lock()
-			_ = a.reloadRoutes(a.ctx, nil)
-			a.publishMu.Unlock()
-		}
+		a.superviseRouting()
+	}
+}
+func (a *App) superviseRouting() {
+	if !a.jobsGate.TryRLock() {
+		return
+	}
+	defer a.jobsGate.RUnlock()
+	if a.runtime.ready("caddy") != nil {
+		return
+	}
+	a.processMu.Lock()
+	caddy := a.caddy
+	a.processMu.Unlock()
+	if caddy == nil {
+		a.publishMu.Lock()
+		defer a.publishMu.Unlock()
+		_ = a.reloadRoutes(a.ctx, nil)
 	}
 }
 func (a *App) restoreProcesses(ctx context.Context) error {
@@ -289,6 +308,11 @@ func (a *App) restoreProcesses(ctx context.Context) error {
 			continue
 		}
 		if d.Snapshot.Adapter == "static" {
+			continue
+		}
+		var desired string
+		_ = a.store.setting("process:"+d.ID, &desired)
+		if desired == "stopped" {
 			continue
 		}
 		a.processMu.Lock()
@@ -366,6 +390,11 @@ func (a *App) processAPI(w http.ResponseWriter, r *http.Request, s Session, p Pr
 	defer a.publishMu.Unlock()
 	if in.Action != "start" {
 		a.stopNode(d.ID)
+	}
+	if in.Action == "stop" {
+		_ = a.store.setSetting("process:"+d.ID, "stopped")
+	} else {
+		_ = a.store.setSetting("process:"+d.ID, "running")
 	}
 	if in.Action != "stop" {
 		env, e := a.deployEnv(d)

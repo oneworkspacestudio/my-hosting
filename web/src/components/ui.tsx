@@ -1,5 +1,6 @@
 import React,{createContext,useContext} from 'react';
-import * as Icons from 'lucide-react';
+import {Bell,SunMoon,Plus,Layers,GitBranch,ShieldCheck,Globe,Rocket,Server,UserRound,UsersRound,Settings2,ScrollText,Circle} from 'lucide-react';
+const Icons:Record<string,any>={Bell,SunMoon,Plus,Layers,GitBranch,ShieldCheck,Globe,Rocket,Server,UserRound,UsersRound,Settings2,ScrollText,Circle};
 
 type FormContext={fields:Record<string,any>;setField:(name:string,value:any)=>void;disabled:boolean;outlet?:React.ReactNode};
 export const Fields=createContext<FormContext>({fields:{},setField:()=>{},disabled:false});
@@ -19,7 +20,7 @@ export const Text=(p:Props)=>React.createElement(p.variant==='pre'?'pre':p.varia
 export const Image=(p:Props)=>React.createElement('img',{src:p.src,alt:p.alt||'',width:p.width,height:p.height,loading:'eager'});
 export const Icon=(p:Props)=>{const Component=(Icons as any)[p.name]||Icons.Circle;return React.createElement(Component,{size:p.size||20,'aria-hidden':true,strokeWidth:1.7});};
 export const Button=(p:Props)=>{const ctx=useContext(Fields);return React.createElement('button',{type:'button',className:cls('button',p),onClick:p.onClick,disabled:p.disabled||ctx.disabled,'aria-label':p['aria-label']},children(p));};
-export const Link=(p:Props)=>React.createElement('a',{href:p.href,className:cls('link',p),target:p.external?'_blank':undefined,rel:p.external?'noopener noreferrer':undefined},children(p));
+export const Link=(p:Props)=>React.createElement('a',{href:p.href,className:cls('link',p),'aria-label':p['aria-label'],target:p.external?'_blank':undefined,rel:p.external?'noopener noreferrer':undefined},children(p));
 export const Field=(p:Props)=>React.createElement('label',{className:'field'},React.createElement('span',{className:'field-label'},p.label),children(p));
 export const Input=(p:Props)=>{const ctx=useContext(Fields);return React.createElement('input',{name:p.name,placeholder:p.placeholder,type:p.type||'text',value:ctx.fields[p.name]??'',min:p.min,max:p.max,required:p.required,disabled:ctx.disabled,autoComplete:p.autoComplete||'off','aria-label':p['aria-label']||p.placeholder||p.name,onChange:(e:React.ChangeEvent<HTMLInputElement>)=>ctx.setField(p.name,e.target.value)});};
 export const Select=(p:Props)=>{const ctx=useContext(Fields);return React.createElement('select',{name:p.name,value:ctx.fields[p.name]??'',disabled:ctx.disabled,'aria-label':p.name,onChange:(e:React.ChangeEvent<HTMLSelectElement>)=>ctx.setField(p.name,e.target.value)},...(p.options||[]).map((o:any)=>React.createElement('option',{key:typeof o==='string'?o:o.value,value:typeof o==='string'?o:o.value},typeof o==='string'?o:o.label)));};

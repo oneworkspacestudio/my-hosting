@@ -182,7 +182,11 @@ func (a *App) backupAPI(w http.ResponseWriter, r *http.Request, s Session) {
 	for _, did := range ids {
 		a.stopNode(did)
 	}
-	defer a.restoreProcesses(a.ctx)
+	if e := a.stopCaddy(); e != nil {
+		fail(w, 500, e)
+		return
+	}
+	defer func() { _ = a.restoreProcesses(a.ctx); _ = a.reloadRoutes(a.ctx, nil) }()
 	path := filepath.Join(a.cfg.Data, "backups", "myhosting-"+id()+".mhbackup")
 	if e := a.makeBackup(path, in.Password); e != nil {
 		os.Remove(path)
@@ -297,6 +301,33 @@ func (a *App) makeBackup(dest, password string) error {
 	if e = json.NewEncoder(entry).Encode(secrets); e != nil {
 		return e
 	}
+	envRows, e := a.store.db.Query("SELECT deploy_id,value FROM deployment_env")
+	if e != nil {
+		return e
+	}
+	portableEnvs := []map[string]string{}
+	for envRows.Next() {
+		var did string
+		var raw []byte
+		if e = envRows.Scan(&did, &raw); e != nil {
+			envRows.Close()
+			return e
+		}
+		plain, e := unprotect(raw)
+		if e != nil {
+			envRows.Close()
+			return e
+		}
+		portableEnvs = append(portableEnvs, map[string]string{"deploy": did, "value": string(plain)})
+	}
+	envRows.Close()
+	envEntry, e := z.Create("portable-deployment-env.json")
+	if e != nil {
+		return e
+	}
+	if e = json.NewEncoder(envEntry).Encode(portableEnvs); e != nil {
+		return e
+	}
 	entry, e = z.Create("backup-manifest.json")
 	if e != nil {
 		return e
@@ -380,6 +411,40 @@ func Restore(source, dest, password string) error {
 		if _, e = db.Exec("UPDATE secrets SET value=? WHERE project_id=? AND name=? AND environment=?", encrypted, s["project"], s["name"], s["environment"]); e != nil {
 			db.Close()
 			return e
+		}
+	}
+	envRaw, e := os.ReadFile(filepath.Join(stage, "portable-deployment-env.json"))
+	if e != nil {
+		db.Close()
+		return e
+	}
+	var envs []map[string]string
+	if e = json.Unmarshal(envRaw, &envs); e != nil {
+		db.Close()
+		return e
+	}
+	for _, env := range envs {
+		encrypted, e := protect([]byte(env["value"]))
+		if e != nil {
+			db.Close()
+			return e
+		}
+		if _, e = db.Exec("UPDATE deployment_env SET value=? WHERE deploy_id=?", encrypted, env["deploy"]); e != nil {
+			db.Close()
+			return e
+		}
+	}
+	var settingsRaw string
+	if e = db.QueryRow("SELECT value FROM settings WHERE name='hosting'").Scan(&settingsRaw); e == nil {
+		var settings Settings
+		if json.Unmarshal([]byte(settingsRaw), &settings) == nil {
+			settings.Public = false
+			settings.PreviewDomain = ""
+			_, e = db.Exec("UPDATE settings SET value=? WHERE name='hosting'", encode(settings))
+			if e != nil {
+				db.Close()
+				return e
+			}
 		}
 	}
 	_, e = db.Exec("DELETE FROM sessions; PRAGMA wal_checkpoint(TRUNCATE)")

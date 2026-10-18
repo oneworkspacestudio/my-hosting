@@ -39,9 +39,12 @@ export function Settings({ data, onAction }: { data: any; onAction: (name: strin
       <Card variant="form">
         <Heading level={2}>Routing & retention</Heading>
         <Field label="Local site port"><Input name="caddyPort" type="number" min={1024} max={65535} /></Field>
-        <Field label="Optional preview parent domain"><Input name="previewDomain" placeholder="sites.example.com" /></Field>
-        <Text variant="caption">Needs matching wildcard DNS to this server and reachable HTTPS. Leave empty for .localhost previews.</Text>
-        <Checkbox name="public" label="Enable public Caddy HTTPS listeners (TCP 80/443)" />
+        <Field label="Sites parent domain"><Input name="previewDomain" placeholder="sites.example.com" /></Field>
+        <Field label="Site address style"><Select name="addressStyle" options={data.addressStyleOptions} /></Field>
+        <Text variant="caption">Free tunnel: choose flat addresses and your root domain, giving my-site-sites.example.com. Direct HTTPS: choose nested addresses and sites.example.com. Previews add deploy-ID-- before the site name. Leave the domain empty for .localhost only.</Text>
+        <Field label="Public HTTPS connection"><Select name="transport" options={data.transportOptions} /></Field>
+        <Text variant="caption">Direct: point wildcard DNS at this server and open TCP 80/443. Tunnel: route wildcard DNS through your tunnel to the local site port, preserving the original hostname. Cloudflare Universal SSL does not cover nested sites.example.com hostnames; check edge certificate coverage before enabling public links.</Text>
+        <Checkbox name="public" label="Enable public site addresses after DNS and HTTPS are ready" />
         <Field label="Retained release target"><Input name="retain" type="number" min={2} max={100} /></Field>
         <Text variant="caption">Published artifacts needed by live routes and rollback references are preserved. Cleanup is explicit; backups are never treated as build cache.</Text>
         <Field label="Concurrent builds"><Select name="concurrency" options={data.concurrencyOptions} /></Field>

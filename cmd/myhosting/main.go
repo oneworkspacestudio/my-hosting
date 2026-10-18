@@ -21,11 +21,14 @@ func main() {
 	}
 }
 func run() error {
-	data := flag.String("data", "data", "Private data folder on local NTFS")
+	defaultData := filepath.Join(os.Getenv("LOCALAPPDATA"), "OneWorkspace", "MyHosting")
+	data := flag.String("data", defaultData, "Private data folder on local NTFS")
 	listen := flag.String("listen", "127.0.0.1:9007", "Loopback management listener")
 	origin := flag.String("origin", "", "Public dashboard address, optionally including /hosting")
 	issuer := flag.String("issuer", os.Getenv("WORKSPACE_OIDC_ISSUER"), "MyAccounts issuer (discovery)")
 	client := flag.String("client-id", os.Getenv("WORKSPACE_OIDC_CLIENT_ID"), "Registered OIDC client ID")
+	sites := flag.String("sites-domain", os.Getenv("WORKSPACE_SITES_DOMAIN"), "Parent domain for published sites, for example sites.example.com")
+	transport := flag.String("sites-transport", os.Getenv("WORKSPACE_SITES_TRANSPORT"), "Site HTTPS transport: direct or tunnel")
 	noBrowser := flag.Bool("no-browser", false, "Run without opening a browser")
 	email := flag.String("email", "", "Standalone bootstrap email")
 	passwordStdin := flag.Bool("password-stdin", false, "Read bootstrap/backup password from standard input")
@@ -45,6 +48,9 @@ func run() error {
 		*origin = "http://" + *listen
 	}
 	cfg := hosting.Config{Data: abs, Listen: *listen, Origin: strings.TrimRight(*origin, "/"), Issuer: *issuer, ClientID: *client, ClientSecret: os.Getenv("WORKSPACE_OIDC_CLIENT_SECRET"), Owner: os.Getenv("WORKSPACE_OWNER_SUBJECT")}
+	cfg.SiteDomain, cfg.SiteTransport = *sites, *transport
+	cfg.SiteStyle = os.Getenv("WORKSPACE_SITES_STYLE")
+	cfg.SiteCFAccount, cfg.SiteCFZone, cfg.SiteCFTunnel, cfg.SiteCFToken = os.Getenv("WORKSPACE_SITES_CF_ACCOUNT"), os.Getenv("WORKSPACE_SITES_CF_ZONE"), os.Getenv("WORKSPACE_SITES_CF_TUNNEL"), os.Getenv("WORKSPACE_SITES_CF_TOKEN")
 	password := func() (string, error) {
 		if !*passwordStdin {
 			return "", errors.New("Use --password-stdin; credentials are never accepted in command-line arguments")
@@ -59,6 +65,8 @@ func run() error {
 		return strings.TrimSuffix(strings.TrimSuffix(string(b), "\n"), "\r"), nil
 	}
 	switch flag.Arg(0) {
+	case "setup":
+		return hosting.OpenSetup(cfg)
 	case "bootstrap":
 		p, e := password()
 		if e != nil {

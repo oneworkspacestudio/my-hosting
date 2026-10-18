@@ -25,7 +25,8 @@ export function Create({ data, onAction }: { data: any; onAction: (name: string)
             <Heading level={2}>Project and source</Heading>
             <Field label="Project name"><Input name="name" placeholder="My lovely website" required={true} /></Field>
             <Field label="Site name"><Input name="slug" placeholder="my-lovely-website" required={true} /></Field>
-            <Text variant="caption">Lowercase letters, numbers and hyphens. This forms your permanent local site address.</Text>
+            <Text variant="caption">Lowercase letters, numbers and hyphens. Your site name stays the same across deployments.</Text>
+            <Text variant="caption">{data.suggestedSiteURL}</Text>
             <Field label="GitHub repository (optional)"><Input name="repository" placeholder="owner/repository" /></Field>
             <Field label="Production branch"><Input name="branch" placeholder="main" /></Field>
             <Text variant="muted">Private repositories can be connected with a protected, fine-grained GitHub credential after creation. For ZIP uploads, leave the repository empty.</Text>
@@ -39,6 +40,7 @@ export function Create({ data, onAction }: { data: any; onAction: (name: string)
             <Field label="Node runtime (only installed when needed)"><Select name="nodeMajor" options={data.nodeOptions} /></Field>
             <Field label="Install command · JSON argument array"><Input name="install" placeholder="JSON arguments, for example npm ci" /></Field>
             <Field label="Build command · JSON argument array"><Input name="build" placeholder="JSON arguments for your build script" /></Field>
+            <Field label="Base directory within the repository"><Input name="baseDirectory" placeholder=". or a package folder" /></Field>
             <Field label="Static output directory"><Input name="output" placeholder="dist or . for an uploaded site root" /></Field>
             <Field label="Start command · generic Node adapter"><Input name="start" placeholder="JSON arguments for the Node server" /></Field>
             <Text variant="caption">Next.js uses standalone output; Nuxt uses Nitro node-server output. Empty install/build commands suit already-built static ZIPs.</Text>

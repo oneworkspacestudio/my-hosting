@@ -16,7 +16,7 @@ import (
 
 const Version = "0.1.0-preview.1"
 
-type Config struct{ Data, Listen, Origin, Issuer, ClientID, ClientSecret, Owner string }
+type Config struct{ Data, Listen, Origin, Issuer, ClientID, ClientSecret, Owner, SiteDomain, SiteTransport, SiteStyle, SiteCFAccount, SiteCFZone, SiteCFTunnel, SiteCFToken string }
 type User struct {
 	ID      string `json:"id"`
 	Issuer  string `json:"issuer"`
@@ -26,26 +26,27 @@ type User struct {
 	Role    string `json:"role"`
 }
 type Project struct {
-	ID         string   `json:"id"`
-	Name       string   `json:"name"`
-	Slug       string   `json:"slug"`
-	Repository string   `json:"repository"`
-	Branch     string   `json:"branch"`
-	Adapter    string   `json:"adapter"`
-	NodeMajor  int      `json:"nodeMajor"`
-	Install    []string `json:"install"`
-	Build      []string `json:"build"`
-	Start      []string `json:"start"`
-	Output     string   `json:"output"`
-	HealthPath string   `json:"healthPath"`
-	Timeout    int      `json:"timeout"`
-	MemoryMB   int      `json:"memoryMB"`
-	DiskMB     int      `json:"diskMB"`
-	Previews   bool     `json:"previews"`
-	Trusted    bool     `json:"trusted"`
-	Live       string   `json:"live"`
-	Created    string   `json:"created"`
-	Role       string   `json:"role,omitempty"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Slug          string   `json:"slug"`
+	Repository    string   `json:"repository"`
+	Branch        string   `json:"branch"`
+	Adapter       string   `json:"adapter"`
+	NodeMajor     int      `json:"nodeMajor"`
+	Install       []string `json:"install"`
+	Build         []string `json:"build"`
+	Start         []string `json:"start"`
+	Output        string   `json:"output"`
+	BaseDirectory string   `json:"baseDirectory"`
+	HealthPath    string   `json:"healthPath"`
+	Timeout       int      `json:"timeout"`
+	MemoryMB      int      `json:"memoryMB"`
+	DiskMB        int      `json:"diskMB"`
+	Previews      bool     `json:"previews"`
+	Trusted       bool     `json:"trusted"`
+	Live          string   `json:"live"`
+	Created       string   `json:"created"`
+	Role          string   `json:"role,omitempty"`
 }
 type Deploy struct {
 	ID          string  `json:"id"`
@@ -83,12 +84,16 @@ type Settings struct {
 	CaddyPort     int    `json:"caddyPort"`
 	Public        bool   `json:"public"`
 	PreviewDomain string `json:"previewDomain"`
+	Transport     string `json:"transport"`
+	AddressStyle  string `json:"addressStyle"`
 	Retain        int    `json:"retain"`
 	Concurrency   int    `json:"concurrency"`
 }
 
-func defaults() Settings { return Settings{CaddyPort: 9080, Retain: 10, Concurrency: 1} }
-func now() string        { return time.Now().UTC().Format(time.RFC3339Nano) }
+func defaults() Settings {
+	return Settings{CaddyPort: 9080, Transport: "direct", Retain: 10, Concurrency: 1}
+}
+func now() string { return time.Now().UTC().Format(time.RFC3339Nano) }
 func id() string {
 	b := make([]byte, 16)
 	if _, e := rand.Read(b); e != nil {
@@ -106,7 +111,7 @@ func encode(v any) string {
 }
 
 var validID = regexp.MustCompile(`^[a-f0-9]{32}$`)
-var validSlug = regexp.MustCompile(`^[a-z][a-z0-9-]{1,47}$`)
+var validSlug = regexp.MustCompile(`^[a-z](?:[a-z0-9-]{0,46}[a-z0-9])$`)
 var validRepo = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$`)
 var validSHA = regexp.MustCompile(`^[a-f0-9]{40}$`)
 var validBranch = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_./-]{0,150}$`)
@@ -156,6 +161,12 @@ func (p *Project) validate() error {
 	}
 	if p.Output == "" {
 		p.Output = "dist"
+	}
+	if p.BaseDirectory == "" {
+		p.BaseDirectory = "."
+	}
+	if !relPath(p.BaseDirectory) {
+		return errors.New("Base directory must stay inside the source repository")
 	}
 	if !relPath(p.Output) {
 		return errors.New("Output directory must stay inside the release")

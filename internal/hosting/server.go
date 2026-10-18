@@ -22,29 +22,33 @@ import (
 )
 
 type App struct {
-	cfg        Config
-	base       string
-	store      *Store
-	web        fs.FS
-	ctx        context.Context
-	cancel     context.CancelFunc
-	started    time.Time
-	authMu     sync.Mutex
-	flows      map[string]loginFlow
-	attempts   map[string]attempt
-	oauth      oauth2.Config
-	verifier   *oidc.IDTokenVerifier
-	jobsMu     sync.Mutex
-	active     map[string]context.CancelFunc
-	wake       chan struct{}
-	jobsGate   sync.RWMutex
-	publishMu  sync.Mutex
-	processMu  sync.Mutex
-	processes  map[string]*managedProcess
-	caddy      *ProcessJob
-	caddyError string
-	runtime    *runtimeManager
-	lock       *os.File
+	bootstrapToken string
+	localSetup     bool
+	cfg            Config
+	base           string
+	store          *Store
+	web            fs.FS
+	ctx            context.Context
+	cancel         context.CancelFunc
+	started        time.Time
+	authMu         sync.Mutex
+	flows          map[string]loginFlow
+	attempts       map[string]attempt
+	oauth          oauth2.Config
+	verifier       *oidc.IDTokenVerifier
+	jobsMu         sync.Mutex
+	active         map[string]context.CancelFunc
+	wake           chan struct{}
+	jobsGate       sync.RWMutex
+	publishMu      sync.Mutex
+	processMu      sync.Mutex
+	processes      map[string]*managedProcess
+	caddy          *ProcessJob
+	caddyError     string
+	caddyDone      chan struct{}
+	caddyAdminPort int
+	runtime        *runtimeManager
+	lock           *os.File
 }
 
 func New(ctx context.Context, cfg Config, web fs.FS) (*App, error) {
@@ -53,6 +57,15 @@ func New(ctx context.Context, cfg Config, web fs.FS) (*App, error) {
 		return nil, errors.New("Set a valid http(s) public origin, optionally including /hosting")
 	}
 	cfg.Origin = strings.TrimRight(cfg.Origin, "/")
+	if cfg.SiteDomain != "" && (!validDomain(cfg.SiteDomain) || len(cfg.SiteDomain) > 189) {
+		return nil, errors.New("Use a valid sites parent domain with room for a 63-character site label")
+	}
+	if cfg.SiteTransport != "" && cfg.SiteTransport != "direct" && cfg.SiteTransport != "tunnel" {
+		return nil, errors.New("Sites transport must be direct or tunnel")
+	}
+	if cfg.SiteStyle != "" && cfg.SiteStyle != "flat" && cfg.SiteStyle != "nested" {
+		return nil, errors.New("Site address style must be flat or nested")
+	}
 	if cfg.Issuer != "" && (cfg.ClientID == "" || cfg.Owner == "") {
 		return nil, errors.New("MyAccounts mode requires a registered client and explicit Workspace owner subject")
 	}
@@ -71,6 +84,10 @@ func New(ctx context.Context, cfg Config, web fs.FS) (*App, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	a := &App{cfg: cfg, base: strings.TrimRight(u.Path, "/"), store: s, web: web, ctx: ctx, cancel: cancel, started: time.Now(), flows: map[string]loginFlow{}, attempts: map[string]attempt{}, active: map[string]context.CancelFunc{}, wake: make(chan struct{}, 1), processes: map[string]*managedProcess{}, lock: lock}
 	a.runtime = &runtimeManager{root: filepath.Join(cfg.Data, "runtimes"), status: map[string]string{}}
+	if e = a.prepareBootstrap(); e != nil {
+		a.Close()
+		return nil, e
+	}
 	if e = a.recoverJobs(); e != nil {
 		a.Close()
 		return nil, e
@@ -89,14 +106,15 @@ func (a *App) Close() {
 	a.jobsGate.Lock()
 	defer a.jobsGate.Unlock()
 	a.processMu.Lock()
-	for _, p := range a.processes {
-		p.cancel()
-	}
-	if a.caddy != nil {
-		a.caddy.Close()
-		a.caddy = nil
+	processIDs := []string{}
+	for did := range a.processes {
+		processIDs = append(processIDs, did)
 	}
 	a.processMu.Unlock()
+	for _, did := range processIDs {
+		a.stopNode(did)
+	}
+	_ = a.stopCaddy()
 	a.store.db.Close()
 	if a.lock != nil {
 		a.lock.Close()
@@ -162,6 +180,10 @@ func (a *App) serve(w http.ResponseWriter, r *http.Request) {
 		a.callback(w, r)
 		return
 	}
+	if path == "/auth/bootstrap" && r.Method == "POST" {
+		a.bootstrap(w, r)
+		return
+	}
 	if path == "/auth/local" && r.Method == "POST" {
 		a.localLogin(w, r)
 		return
@@ -173,7 +195,7 @@ func (a *App) serve(w http.ResponseWriter, r *http.Request) {
 	if path == "/api/bootstrap-status" && r.Method == "GET" {
 		var n int
 		_ = a.store.db.QueryRow("SELECT COUNT(*) FROM users WHERE role='owner'").Scan(&n)
-		jsonOut(w, 200, map[string]any{"oidc": a.cfg.Issuer != "", "configured": n > 0 || a.cfg.Issuer != "", "base": a.base, "version": Version})
+		jsonOut(w, 200, map[string]any{"oidc": a.cfg.Issuer != "", "configured": n > 0 || a.cfg.Issuer != "", "base": a.base, "version": Version, "setup": a.localSetup && a.bootstrapCode() != ""})
 		return
 	}
 	if strings.HasPrefix(path, "/api/") {
@@ -218,7 +240,7 @@ func (a *App) serve(w http.ResponseWriter, r *http.Request) {
 }
 func (a *App) api(w http.ResponseWriter, r *http.Request, s Session, path string) {
 	if path == "me" && r.Method == "GET" {
-		jsonOut(w, 200, map[string]any{"user": s.User, "csrf": s.CSRF, "version": Version, "origin": a.cfg.Origin})
+		jsonOut(w, 200, map[string]any{"user": s.User, "csrf": s.CSRF, "version": Version, "origin": a.cfg.Origin, "publication": a.settings()})
 		return
 	}
 	if path == "projects" {
@@ -349,7 +371,28 @@ func (a *App) api(w http.ResponseWriter, r *http.Request, s Session, path string
 		http.NotFound(w, r)
 	}
 }
-func (a *App) settings() Settings { s := defaults(); _ = a.store.setting("hosting", &s); return s }
+func (a *App) settings() Settings {
+	s := defaults()
+	s.PreviewDomain = a.cfg.SiteDomain
+	s.AddressStyle = "nested"
+	if a.cfg.SiteStyle != "" {
+		s.AddressStyle = a.cfg.SiteStyle
+	}
+	if a.cfg.SiteTransport != "" {
+		s.Transport = a.cfg.SiteTransport
+	}
+	if s.Transport == "tunnel" && s.AddressStyle == "flat" && a.cfg.SiteCFToken != "" {
+		s.Public = true
+	}
+	_ = a.store.setting("hosting", &s)
+	if s.Transport == "" {
+		s.Transport = "direct"
+	}
+	if s.AddressStyle == "" {
+		s.AddressStyle = "nested"
+	}
+	return s
+}
 func (a *App) settingsAPI(w http.ResponseWriter, r *http.Request, s Session) {
 	if !requireAdmin(w, s) {
 		return
@@ -366,8 +409,31 @@ func (a *App) settingsAPI(w http.ResponseWriter, r *http.Request, s Session) {
 	if !readJSON(w, r, &next) {
 		return
 	}
-	if next.CaddyPort < 1024 || next.CaddyPort > 65535 || next.CaddyPort == mustPort(a.cfg.Listen) || next.Retain < 2 || next.Retain > 100 || next.Concurrency != 1 || (next.PreviewDomain != "" && !validDomain(next.PreviewDomain)) {
-		fail(w, 400, errors.New("Choose a free site port (1024–65535), retain 2–100 releases and concurrency 1; use a valid optional preview domain"))
+	if next.Transport == "" {
+		next.Transport = "direct"
+	}
+	if next.AddressStyle == "" {
+		next.AddressStyle = "nested"
+	}
+	if next.AddressStyle != "nested" && next.AddressStyle != "flat" {
+		fail(w, 400, errors.New("Choose nested or flat site addresses"))
+		return
+	}
+	if next.CaddyPort < 1024 || next.CaddyPort > 65535 || next.CaddyPort == mustPort(a.cfg.Listen) || next.Retain < 2 || next.Retain > 100 || next.Concurrency != 1 || (next.Transport != "direct" && next.Transport != "tunnel") || (next.PreviewDomain != "" && (!validDomain(next.PreviewDomain) || len(next.PreviewDomain) > 189)) {
+		fail(w, 400, errors.New("Choose a free site port (1024–65535), retain 2–100 releases and concurrency 1; use a valid sites parent domain and direct or tunnel HTTPS"))
+		return
+	}
+	if a.runtime.ready("caddy") != nil {
+		if next.Public {
+			fail(w, 409, errors.New("Provision Caddy before enabling public HTTPS"))
+			return
+		}
+		if e := a.store.setSetting("hosting", next); e != nil {
+			fail(w, 500, dbError(e))
+			return
+		}
+		_ = a.store.audit(s.User.ID, "", "settings.updated", next)
+		jsonOut(w, 200, next)
 		return
 	}
 	old := a.settings()
@@ -467,7 +533,7 @@ func Run(ctx context.Context, cfg Config, web fs.FS, browser bool) error {
 	go func() { done <- srv.Serve(ln) }()
 	fmt.Println("My Hosting", Version, "ready at", cfg.Origin)
 	if browser {
-		openBrowser(cfg.Origin)
+		openBrowser(a.setupURL())
 	}
 	select {
 	case <-ctx.Done():

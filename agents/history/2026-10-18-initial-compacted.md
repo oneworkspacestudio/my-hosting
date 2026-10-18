@@ -52,3 +52,167 @@ portable backup must also re-encrypt deployment_env on another machine; complete
 role/UI audit path and avoid duplicate process starts. Suite integration is not yet
 implemented. Current UI generated/semantic adapter uses permissive inferred loop
 types due compiler0.2.1; AUI is the authoritative screen source. No Actions.
+
+## Later corrections and successful checks
+
+Working repository is I:/Projects/my-hosting. First explicitly unfinished source
+checkpoint36d469f pushed to original org repo; Actions disabled and no tags/releases.
+Restricted worker failure fixed: set project SID on restricted token object's DACL
+and its default object DACL, create a private low-integrity desktop, launch suspended
+with explicit inherited handles, assign job before resume. Negative own-write,
+host/cross-project read/write and ACL-change tests pass. Full third Go run passed
+validation/archive/redaction/encrypted framing/role/CSRF/queue/restart/audit tests.
+Diagnostic restricted-token variants remain in policy_diagnostics_test.go; replace
+with product acceptance tests rather than counting diagnostics as feature coverage.
+
+Implemented atomic DB publication/revert routing, upload-staging recovery, frozen
+portable environment export, retained source archives, base directories/detection,
+Next static asset copying, persistent desired process stop, audit/access UI and
+one-use local first-run setup capability. Later fixes need another compile/test.
+12 real browser checks passed standalone owner setup/login, persisted project
+wizard, navigation/API, dark theme/mobile overflow. UI assets281.91KB JS. Screenshots
+docs/screenshots and external ui-first-acceptance.json contain synthetic state only.
+Suite codex/my-hosting integration now uncommitted; targeted suite/distribution/
+branding tests passed. Remaining lock/build-org/README/default installer pin not done.
+
+Current Caddy implementation disables admin and uses validated --watch file reload.
+Planned production improvement NOT implemented: owner-protected Windows AF_UNIX
+admin socket with no TCP admin, supported atomic /load API, negative worker-connect
+test, and cold-stop Caddy state during encrypted backup. Verify socket ACLs/path
+limits and reload rollback before replacing existing implementation. Do not claim
+runtime, Node/Next/Nuxt, full restore, real OIDC, service/reboot or installer checks.
+
+## Approved storage cleanup and latest owner direction
+
+Owner explicitly requested deletion of experimental backups (no archive), then
+leave live Workspace on C: for now. No disk migration/repair/format/VHD authorized.
+Both E/I are dirty exFAT. Removed all16 live-install rollback folders and old
+installation copy, stopped/deleted this task's synthetic fixture and old Vault
+fixture after path/reparse/process/service/task checks. Recovery list set[] under
+update lock. Additional obsolete maintenance backup copies/source ZIP removed.
+Recovered about22.8GiB; C: now23.20GiB free. Live owner suite preserved and healthy
+locally/publicly. Do not delete personal Downloads, global caches or active runtime
+compressed assets. Newest-backup retention was overridden only for this cleanup.
+MyHosting test listener19007 is stopped; recreate fresh protected synthetic fixture
+for remaining acceptance. Screenshots/non-secret receipts already on I. Continue
+using I for large public build artifacts and bounded C NTFS fixtures with cleanup.
+
+## Sites namespace, native/public acceptance and current preview
+
+Owner resumed implementation and requested sites.m8e.co.uk. Explained nested
+Cloudflare certificate coverage; scoped stored API token cannot read SSL packs
+(403), and no sites/wildcard record existed. Owner briefly chose direct HTTPS,
+then explicitly changed to the easier FREE tunnel option. Final agreed URLs:
+`my-site-sites.m8e.co.uk` and `deploy-ID--my-site-sites.m8e.co.uk`. Other installs
+use their own zone. No router edits or paid features; unused router tab closed.
+
+Implemented nested/flat address styles and direct/tunnel transport, startup
+defaults from Workspace, exact per-host proxied CNAME and tunnel ingress creation,
+account/zone boundary/conflict checks and original-host preservation. No zone-wide
+wildcard route. Cloudflare credentials are passed only to the control process,
+never inherited by restricted builds. Suite launch integration uses protected
+cloudflare-resources and HostingToken (MailDNSToken fallback). Core tests verify
+DNS conflict refusal and preservation of other tunnel routes/settings.
+
+IMPORTANT correction to previous socket plan: official Caddy2.11.7 Unix socket
+startup FAILS on Windows because its listener unconditionally chmods socket files.
+Abandoned this and removed AF_UNIX control code. Now plaintext admin disabled;
+authenticated remote admin binds an ephemeral LOOPBACK TCP port, with mandatory
+client certificate and only POST/load permission. Client key DPAPI/NTFS protected.
+Dedicated internal CA/server identity, normal TLS verification and pinned CA,
+install_trust=false: no OS/browser certificate-store changes. Caddy atomic load
+and exact revision probe pass native switches/rollback. Backup stops Caddy+Node
+and supervisor respects exclusive backup gate. Config failed-switch rollback
+loads previous config through API. No --watch and no custom Caddy binary needed.
+
+Windows process fixes: pass nil cwd for empty exec.Dir, explicit Caddy cwd, and
+grant project SID READ_ATTRIBUTES/TRAVERSE/SYNCHRONIZE only on data/project path
+ancestors because Node realpath stats each ancestor. No listing/content/write or
+inherited grant. Host/cross-project reads and published-code writes remain denied.
+Removed diagnostic-only policy test. Full native Go suite passed21.8seconds with
+actual Caddy/Node archives, including static publish/previews/switch/rollback,
+encrypted backup/restore of secrets+sources, Node publish/restart/isolation and
+anonymous mTLS denial. UI build passed283.07KB. Later metrics/UI/public DNS helper
+changes need rerun. Suite targeted Hosting/seamless tests pass. Logs on I:
+backend-native-tests.log, publication-tests.log, node-tests*.log, suite-sites-tests.log.
+
+Public synthetic preview CURRENTLY RUNNING, not installed in owner's catalog:
+- root C:/Projects/.cache/myhosting-acceptance-20261018/public-preview (protected);
+- binary I:/Projects/tooling/my-hosting-work/bin/MyHosting-new.exe, PID126808;
+- management http://127.0.0.1:19007; Caddy loopback19080;
+- synthetic test owner, disposable credentials only in external test scripts;
+- project7a95f1361be78983cfe39b3a78b7dd43, slug hosting-demo-26;
+- published retry852317335cec29569ffbf7568cb88dc0;
+- public https://hosting-demo-26-sites.m8e.co.uk, exact owned DNS/tunnel rule
+  added to existing Cloudflare connection. Other routes preserved.
+Original deployment failed because Windows/router still resolved old wildcard
+198.23... while Cloudflare/Google public DNS already had the correct proxy IPs.
+Added fresh Cloudflare DoH, bounded IP-pinned HTTPS with normal hostname/CA checks
+and progress logs. Retry published; standard Windows DNS subsequently refreshed,
+Invoke-WebRequest200/header matched and Chrome DOM showed the actual page.
+
+External scripts/receipts under tooling/my-hosting-work: start-public-acceptance.ps1
+(-Resume for existing synthetic root), retry-public-acceptance.ps1, public-preview-
+process.json and public-acceptance.json. First exe replacement failed on exFAT
+(rename then Access Denied despite no live process); did NOT force ACLs. Running
+new build at MyHosting-new.exe instead. Old public binary remains; source intact.
+Stop/check only this owned preview after task verification; remove owned test
+DNS/ingress or migrate the sample deliberately before deleting its data, avoiding
+stranded502 routes. Do not stop owner's live Workspace/tunnel or test its accounts.
+
+CUA bindings: hostingTab IAB10 authenticated synthetic dashboard, marked deliverable;
+publicChrome Chrome585733629 successfully loaded public site, screenshot attempt
+timed out before markDeliverable. IAB11 stuck on internal network-error data URL
+from old DNS; getTab hit URL policy (do not inspect/bypass that data page).
+Repo screenshot docs/screenshots/publication-live.png saved via CUA and viewed.
+Public site's HTTP+TLS+Chrome proof succeeded. Current screenshots are narrow
+responsive IAB width, not desktop marketing mockups. Fix discovered public traffic
+counter matching (old prefix excluded flat hosts), added exact host set and
+mobile nav aria-labels; not yet rebuilt/rerun after these latest edits.
+
+Remaining original gates still require work; README/docs/IMPLEMENTATION explicitly
+unfinished. New docs/PUBLISHING.md describes free URL setup, TLS and data boundaries.
+App first GitHub source checkpoint still36d469f; subsequent changes not pushed yet.
+Suite feature branch still uncommitted; organization release pin/build-org/README,
+brand exports and paired publication unfinished. Continue actual SSR/OIDC/installer
+acceptance; do not replace required checks with current public static success.
+
+## Follow-up acceptance in progress
+
+Source now includes OIDC fixture provider tests covering RSA JWT discovery/code,
+PKCE/nonce, explicit owner vs viewer identity, unverified email, invalid issuer/
+audience/expiry, callback replay and logout. All passed in full native suite39.9s
+(backend-oidc-tests.log). Flat-host metrics matching and mobile nav accessible
+labels fixed; latest frontend build283.48KB. Added publication settings to /api/me
+and suggested URL in project wizard. Added read-only runtime ancestor metadata
+grants for npm's own main module and a real restricted static build check; rerun
+native tests after these last edits. Caddy/Node/other-process isolation still
+passes in latest completed run. Original six Caddy mTLS settings reloads work.
+
+Brand exports generated from original SVG using existing bundled Sharp (no C
+dependency installation): PNG64/128/256/512 and ICO, branding/export.cjs. Suite
+overview regenerated with balanced6columns/17icons at app-suite-368eccf3.png;
+README links that hash and adds My Hosting row marked integration in progress.
+App README links actual publication-live.png; docs explain final free URL pattern.
+
+Public Chrome tab585733629 DOM confirmed the actual successful site. Screenshot
+timed out, so no public-site.png was created and deliverable marking after that
+call did not run. IAB10 still marked deliverable with local dashboard. Live Caddy
+PID126008 at19080 belongs only to synthetic preview; manager126808 uses NEW exe.
+Normal system DNS eventually resolved Cloudflare IPs and ordinary HTTPS request
+200/header matched. Do not claim IAB11 succeeded (old internal error page).
+
+Added real framework fixtures under examples/next and examples/nuxt: Next16.4.2,
+React19.3.1, Nuxt4.6.2 from official npm metadata. Next package-lock generated.
+Nuxt `npm install --package-lock-only --ignore-scripts --audit=false --fund=false`
+is STILL RUNNING in exec session95900, no lock yet at last check. Cache/TEMP on I.
+Native SSR test15887 also RUNNING with MYHOSTING_SSR=1 and actual Caddy/NodeZIPs;
+hosting.test PID122024, root unit-3634010272, Next npm child117840. It is installing
+Next dependencies through the restricted worker; log deploybb8f0b03065b1baae0b7fac39da01c2e.
+Monitor log/npm cache, not live owner data. Next then Nuxt run sequentially; Nuxt
+requires package-lock to finish. Reports ssr-tests.log; no SSR success claimed yet.
+Default tests skip heavy SSR unless explicitly enabled. C free22.74GiB at last check.
+
+No commits beyond initial app36d469f yet; both worktrees have intended changes.
+Commit/push an explicitly unfinished source checkpoint after tests/log checks to
+preserve work on warning-state I. Paired release/install gates still incomplete.

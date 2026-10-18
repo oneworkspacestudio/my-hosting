@@ -3,14 +3,10 @@ package hosting
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
-	"time"
+	"strings"
 )
 
 func (a *App) siteHost(d Deploy) string {
@@ -21,7 +17,10 @@ func (a *App) siteHost(d Deploy) string {
 	}
 	name := d.Snapshot.Slug
 	if d.Environment == "preview" {
-		name = d.ID[:12] + "--" + name
+		name = previewLabel(d.ID, name)
+	}
+	if s.AddressStyle == "flat" {
+		name += "-sites"
 	}
 	return name + "." + suffix
 }
@@ -30,7 +29,7 @@ func (a *App) deployURL(d Deploy) string {
 	if s.PreviewDomain != "" && s.Public {
 		return "https://" + a.siteHost(d)
 	}
-	return fmt.Sprintf("http://%s:%d", a.siteHost(d), s.CaddyPort)
+	return fmt.Sprintf("http://%s:%d", d.Snapshot.SlugHostLocal(d), s.CaddyPort)
 }
 func (a *App) caddyState() map[string]any {
 	a.processMu.Lock()
@@ -39,12 +38,12 @@ func (a *App) caddyState() map[string]any {
 	if a.caddy != nil {
 		state = "running"
 	}
-	return map[string]any{"state": state, "error": a.caddyError, "adminAPI": "disabled", "scope": "One owned instance; external Caddy instances are never adopted"}
+	return map[string]any{"state": state, "error": a.caddyError, "adminAPI": "mutual TLS on loopback; unauthenticated admin disabled", "scope": "One owned instance; external Caddy instances are never adopted"}
 }
 func (a *App) route(d Deploy, hosts []string) map[string]any {
 	handlers := []any{map[string]any{"handler": "headers", "response": map[string]any{"set": map[string][]string{"X-MyHosting-Deploy": {d.ID}, "X-Content-Type-Options": {"nosniff"}}}}}
 	if d.Snapshot.Adapter == "static" {
-		root := filepath.Join(a.releaseRoot(d), filepath.FromSlash(d.Snapshot.Output))
+		root := filepath.Join(a.releaseRoot(d), filepath.FromSlash(sourceBase(d.Snapshot)), filepath.FromSlash(d.Snapshot.Output))
 		handlers = append(handlers, map[string]any{"handler": "vars", "root": root}, map[string]any{"handler": "file_server", "hide": []string{".git", ".env", ".env.*"}})
 	} else {
 		handlers = append(handlers, map[string]any{"handler": "reverse_proxy", "upstreams": []any{map[string]any{"dial": fmt.Sprintf("127.0.0.1:%d", d.Port)}}, "headers": map[string]any{"request": map[string]any{"set": map[string][]string{"X-Forwarded-Proto": {"{http.request.scheme}"}}}}})
@@ -53,6 +52,10 @@ func (a *App) route(d Deploy, hosts []string) map[string]any {
 }
 func (a *App) routing(incoming *Deploy) (map[string]any, error) {
 	s := a.settings()
+	admin, e := a.adminConfig()
+	if e != nil {
+		return nil, e
+	}
 	rows, e := a.store.db.Query("SELECT detail FROM deployments WHERE state='published'")
 	if e != nil {
 		return nil, e
@@ -72,7 +75,8 @@ func (a *App) routing(incoming *Deploy) (map[string]any, error) {
 		ds = append(ds, d)
 	}
 	rows.Close()
-	local := []any{}
+	revision := id()
+	local := []any{map[string]any{"match": []any{map[string]any{"host": []string{"control.myhosting.localhost"}, "path": []string{"/__myhosting_health"}}}, "handle": []any{map[string]any{"handler": "headers", "response": map[string]any{"set": map[string][]string{"X-MyHosting-Deploy": {revision}}}}, map[string]any{"handler": "static_response", "status_code": 200, "body": "ready"}}, "terminal": true}}
 	public := []any{}
 	for _, d := range ds {
 		p, e := a.store.project(d.ProjectID)
@@ -115,19 +119,32 @@ func (a *App) routing(incoming *Deploy) (map[string]any, error) {
 			}
 		}
 	}
+	if s.Public && s.Transport == "tunnel" {
+		local = append(local, public...)
+	}
 	local = append(local, map[string]any{"handle": []any{map[string]any{"handler": "static_response", "status_code": 404, "body": "No published My Hosting site matches this hostname."}}})
 	servers := map[string]any{"local": map[string]any{"listen": []string{"127.0.0.1:" + strconv.Itoa(s.CaddyPort)}, "routes": local, "automatic_https": map[string]any{"disable": true}, "logs": map[string]any{"default_logger_name": "access"}}}
-	if s.Public && len(public) > 0 {
+	if s.Public && s.Transport != "tunnel" && len(public) > 0 {
 		servers["public"] = map[string]any{"listen": []string{":443"}, "routes": public, "tls_connection_policies": []any{map[string]any{}}, "logs": map[string]any{"default_logger_name": "access"}}
 	}
-	return map[string]any{"admin": map[string]any{"disabled": true}, "storage": map[string]any{"module": "file_system", "root": filepath.Join(a.cfg.Data, "caddy", "state")}, "logging": map[string]any{"logs": map[string]any{"access": map[string]any{"include": []string{"http.log.access"}, "writer": map[string]any{"output": "file", "filename": filepath.Join(a.cfg.Data, "logs", "access.json"), "roll_size_mb": 10, "roll_keep": 3}}}}, "apps": map[string]any{"http": map[string]any{"servers": servers}}}, nil
+	return map[string]any{"admin": admin, "storage": map[string]any{"module": "file_system", "root": filepath.Join(a.cfg.Data, "caddy", "state")}, "logging": map[string]any{"logs": map[string]any{"access": map[string]any{"include": []string{"http.log.access"}, "writer": map[string]any{"output": "file", "filename": filepath.Join(a.cfg.Data, "logs", "access.json"), "roll_size_mb": 10, "roll_keep": 3}}}}, "apps": map[string]any{"pki": map[string]any{"certificate_authorities": map[string]any{"hosting-control": map[string]any{"install_trust": false}}}, "http": map[string]any{"servers": servers}}}, nil
 }
 func (p Project) SlugHostLocal(d Deploy) string {
 	host := p.Slug
 	if d.Environment == "preview" {
-		host = d.ID[:12] + "--" + host
+		host = previewLabel(d.ID, host)
 	}
 	return host + ".localhost"
+}
+func previewLabel(deployID, slug string) string {
+	if len(deployID) > 10 {
+		deployID = deployID[:10]
+	}
+	if len(slug) > 37 {
+		slug = slug[:37]
+	}
+	slug = strings.TrimRight(slug, "-")
+	return "deploy-" + deployID + "--" + slug
 }
 func (a *App) reloadRoutes(ctx context.Context, incoming *Deploy) error {
 	if e := a.runtime.ready("caddy"); e != nil {
@@ -140,77 +157,9 @@ func (a *App) reloadRoutes(ctx context.Context, incoming *Deploy) error {
 	if e != nil {
 		return e
 	}
-	body := []byte(encode(config))
-	path := filepath.Join(a.cfg.Data, "caddy", "caddy.json")
-	temp := filepath.Join(a.cfg.Data, "caddy", "validate-"+id()+".json")
-	if e = os.WriteFile(temp, body, 0600); e != nil {
-		return e
-	}
-	defer os.Remove(temp)
-	runtime := a.runtime.path("caddy")
-	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(checkCtx, filepath.Join(runtime, "caddy.exe"), "validate", "--config", temp)
-	cmd.Env = []string{"SystemRoot=" + os.Getenv("SystemRoot"), "APPDATA=" + filepath.Join(a.cfg.Data, "caddy"), "LOCALAPPDATA=" + filepath.Join(a.cfg.Data, "caddy"), "TEMP=" + filepath.Join(a.cfg.Data, "cache")}
-	if e = cmd.Run(); e != nil {
-		return errors.New("Caddy rejected the generated routing configuration; the previous config is retained")
-	}
-	old, _ := os.ReadFile(path)
-	if e = atomicFile(path, body); e != nil {
-		return e
-	}
-	a.processMu.Lock()
-	running := a.caddy != nil
-	a.processMu.Unlock()
-	if !running {
-		ln, e := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", a.settings().CaddyPort))
-		if e != nil {
-			_ = atomicFile(path, old)
-			return errors.New("Site port is in use by another application. Choose a free port in Settings; external servers are never adopted")
-		}
-		ln.Close()
-		log, e := os.OpenFile(filepath.Join(a.cfg.Data, "logs", "caddy.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-		if e != nil {
-			return e
-		}
-		run := exec.Command(filepath.Join(runtime, "caddy.exe"), "run", "--config", path, "--watch")
-		run.Env = cmd.Env
-		run.Stdout = log
-		run.Stderr = log
-		j, e := startProcess(run, "", 0, false)
-		if e != nil {
-			log.Close()
-			return e
-		}
-		a.processMu.Lock()
-		a.caddy = j
-		a.caddyError = ""
-		a.processMu.Unlock()
-		go func() {
-			e := run.Wait()
-			j.Close()
-			log.Close()
-			a.processMu.Lock()
-			if a.caddy == j {
-				a.caddy = nil
-				if e != nil {
-					a.caddyError = "Caddy stopped; check its process log and port permissions"
-				}
-			}
-			a.processMu.Unlock()
-		}()
-	}
-	if incoming != nil {
-		probeCtx, probeCancel := context.WithTimeout(ctx, 20*time.Second)
-		defer probeCancel()
-		host := incoming.Snapshot.SlugHostLocal(*incoming)
-		e = waitHealth(probeCtx, fmt.Sprintf("http://127.0.0.1:%d%s", a.settings().CaddyPort, incoming.Snapshot.HealthPath), host, incoming.ID)
-		if e != nil {
-			if len(old) > 0 {
-				_ = atomicFile(path, old)
-			}
-			return errors.New("The new route did not pass its health probe. Previous routes were restored; inspect Caddy and process logs")
-		}
-	}
-	return nil
+	return a.applyCaddyConfig(ctx, config)
+}
+
+func routingRevision(config map[string]any) string {
+	return config["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["local"].(map[string]any)["routes"].([]any)[0].(map[string]any)["handle"].([]any)[0].(map[string]any)["response"].(map[string]any)["set"].(map[string][]string)["X-MyHosting-Deploy"][0]
 }
