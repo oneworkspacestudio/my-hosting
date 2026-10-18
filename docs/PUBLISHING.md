@@ -63,3 +63,22 @@ and resume afterward; restored installations leave public routing disabled.
 Sources: [Cloudflare SSL coverage](https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/limitations/),
 [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/),
 [Caddy management API](https://caddyserver.com/docs/api).
+
+
+## Publishing the managed update contract
+
+The current installed Hosting group contains `hosting`, `hosting-LICENSE`,
+`hosting-NOTICE` and `hosting-THIRD-PARTY-LICENSES.txt`. Supplemental guides,
+compatibility and dependency inventories are in the app release ZIP; current
+optional-app selection does not retain those supplemental catalog packages.
+Generate `workspace-update.json` for the four installed packages, with the
+canonical catalog app/launch contract (default9007), not a test installation's
+allocated port or the raw supplemental package list. The updater preserves each
+installation's actual port. Do not weaken its package/path ownership checks.
+
+Use the suite's `cmd/update-manifest` publisher against a compatible canonical
+catalog scoped to those installed files. Each package names the published ZIP
+and its exact member, hash and size. Upload the marker with the app release and
+verify its actual GitHub digest. Native acceptance downloaded the real public
+ZIP through that contract and verified the extracted executable. Paired suite
+publication then makes first-install discovery available in its normal catalog.
