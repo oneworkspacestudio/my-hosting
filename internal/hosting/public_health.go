@@ -80,6 +80,12 @@ func waitPublicSite(ctx context.Context, raw, deployment string, report func(str
 					last = fmt.Errorf("Public edge returned HTTP %d before the expected release was visible", response.StatusCode)
 				} else {
 					last = errors.New("Public HTTPS connection/certificate is not ready")
+					var request *url.Error
+					if errors.As(requestErr, &request) {
+						// The nested cause explains network/TLS failures without
+						// logging a possibly sensitive health URL query.
+						last = fmt.Errorf("Public HTTPS check: %v", request.Err)
+					}
 				}
 				transport.CloseIdleConnections()
 			}

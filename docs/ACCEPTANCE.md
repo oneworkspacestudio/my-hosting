@@ -8,6 +8,8 @@ No GitHub Actions were run.
 | Check | Evidence/result |
 |---|---|
 | Full native Go suite | Passed192.843s, pinned official Caddy2.11.7/Node24.22.0, actual Windows processes. |
+| Real GitHub Express | Public org archive pinned to a483058, npm installed68 packages under the restricted worker; actual Express5.1.0 served via managed Node/Caddy/free tunnel. |
+| Restart permission reset | Protected existing runtime files, restored Node traffic, and ran npm successfully after regranting read/execute to protected descendants. |
 | Next standalone | Next16.4.2 + React19.3.1 built84.28s and served server-rendered output through Caddy. |
 | Nuxt Nitro | Nuxt4.6.2 + Nitro2.13.4 built40.90s using documented in-process Oxc and served through Caddy. |
 | Static publication | ZIP upload, production switch, preview route, promotion/rollback, exact deployment-header probes passed. |
@@ -31,6 +33,7 @@ No GitHub Actions were run.
 Public synthetic examples on the owner's test zone:
 
 - [Static production](https://hosting-demo-26-sites.m8e.co.uk/)
+- [GitHub Express production](https://hosting-node-26-sites.m8e.co.uk/)
 - [Static branch-style preview](https://deploy-129e44ffb0--hosting-demo-26-sites.m8e.co.uk/)
 
 These are demonstrators, not a hosting service for other installations. Other
@@ -39,6 +42,10 @@ active until intentionally retired; provider DNS cleanup is not automatic.
 
 ## Failures found and repaired during acceptance
 
+- Actual GitHub archives begin with a PAX global revision comment. The extractor
+  now accepts bounded safe metadata while rejecting path overrides and traversal.
+- Startup protects runtime files individually; runtime read grants now reapply to
+  each protected child so npm and Node can run after restart/restore.
 - Metrics nested a settings query inside a one-connection SQLite row iteration;
   dashboard loading could hang. Settings are now fetched before iterating rows.
 - Restricted Windows named pipes prevented framework compiler child stdio.

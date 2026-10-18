@@ -235,6 +235,20 @@ func sandboxDir(path, pid string) error {
 	return windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.LABEL_SECURITY_INFORMATION, nil, nil, nil, sacl)
 }
 func allowRuntime(path, pid string) error {
+	// Startup deliberately protects existing runtime files individually.
+	// Reapply read/execute to every item: an inheritable root ACE cannot
+	// penetrate a protected child DACL after a manager restart/restore.
+	return filepath.WalkDir(path, func(p string, d fs.DirEntry, e error) error {
+		if e != nil {
+			return e
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return errors.New("Runtime contains a link")
+		}
+		return grantRuntimeRead(p, pid)
+	})
+}
+func grantRuntimeRead(path, pid string) error {
 	sd, e := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
 	if e != nil {
 		return e

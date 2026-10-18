@@ -142,4 +142,3 @@ this preview does not automatically garbage-collect provider DNS on uninstall.
 Changing an existing public namespace/transport is an administrator migration:
 old provider routes are not silently rewritten or deleted. Use the same routing
 settings for routine upgrades. Automated namespace migration is not implemented.
-

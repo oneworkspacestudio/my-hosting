@@ -18,6 +18,11 @@ try{
 }finally{Pop-Location}
 Push-Location $root
 try{
+ $gitSafe='safe.directory='+$root.Replace('\','/')
+ $sourceCommit=(& git -c $gitSafe -C $root rev-parse HEAD).Trim()
+ if($LASTEXITCODE -or $sourceCommit -notmatch '^[a-f0-9]{40}$'){throw 'Cannot identify committed build source'}
+ $changes=& git -c $gitSafe -C $root status --porcelain
+ if($LASTEXITCODE -or $changes){throw 'Commit intended source changes before packaging a release'}
  if(-not $SkipTests){& $Go test -buildvcs=false ./...;if($LASTEXITCODE){throw 'Backend tests failed'}}
  # Resource source/export pipeline is committed; regenerate after icon changes.
  & $Go build -buildvcs=false -trimpath -ldflags '-s -w' -o (Join-Path $Output 'MyHosting.exe') ./cmd/myhosting
@@ -40,7 +45,7 @@ try{
  $inventory=[Collections.Generic.List[object]]::new()
  $notice=[Text.StringBuilder]::new()
  [void]$notice.AppendLine('My Hosting third-party attribution. Managed Caddy/Node archives retain their own complete notices.').AppendLine()
- $modules=& $Go list -m -f '{{.Path}}|{{.Version}}|{{.Dir}}' all
+ $modules=& $Go list -buildvcs=false -deps -f '{{if .Module}}{{.Module.Path}}|{{.Module.Version}}|{{.Module.Dir}}{{end}}' ./cmd/myhosting | Where-Object {$_} | Sort-Object -Unique
  if($LASTEXITCODE){throw 'Go dependency inventory failed'}
  foreach($line in $modules){
   $parts=$line.Split('|');if($parts[0] -eq 'github.com/oneworkspacestudio/my-hosting'){continue}
@@ -52,10 +57,10 @@ try{
  }
  $goRoot=(& $Go env GOROOT).Trim()
  [void]$notice.AppendLine('===== Go runtime =====').AppendLine([IO.File]::ReadAllText((Join-Path $goRoot 'LICENSE')))
- $lock=Get-Content -LiteralPath (Join-Path $root 'web/package-lock.json') -Raw|ConvertFrom-Json
- foreach($item in $lock.packages.PSObject.Properties){
-  if(-not $item.Name){continue}
-  $inventory.Add(@{ecosystem='npm';name=($item.Name -replace '^.*node_modules/','');version=$item.Value.version;dev=[bool]$item.Value.dev;license=$item.Value.license;integrity=$item.Value.integrity})
+ $lock=Get-Content -LiteralPath (Join-Path $root 'web/package-lock.json') -Raw|ConvertFrom-Json -AsHashtable
+ foreach($item in $lock.packages.GetEnumerator()){
+  if(-not $item.Key){continue}
+  $inventory.Add(@{ecosystem='npm';name=($item.Key -replace '^.*node_modules/','');version=$item.Value.version;dev=[bool]$item.Value.dev;license=$item.Value.license;integrity=$item.Value.integrity})
  }
  # The shipped browser bundle includes these packages; the AUI compiler generates
  # source at build time, and its license is preserved too.
@@ -69,6 +74,7 @@ try{
  }
  [IO.File]::WriteAllText((Join-Path $stage 'THIRD-PARTY-LICENSES.txt'),$notice.ToString(),[Text.UTF8Encoding]::new($false))
  [IO.File]::WriteAllText((Join-Path $stage 'dependencies.json'),(@{schema=1;application='My Hosting';version=$version;components=$inventory}|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
+ [IO.File]::WriteAllText((Join-Path $stage 'build-info.json'),(@{repository='oneworkspacestudio/my-hosting';sourceCommit=$sourceCommit;version=$version;localWindowsBuild=$true;githubActionsUsed=$false;signing='unsigned preview';compatibility='compatibility.json';acceptance='docs/ACCEPTANCE.md'}|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
  $pins=[Collections.Generic.List[object]]::new()
  $runtimeSource=[IO.File]::ReadAllText((Join-Path $root 'internal/hosting/runtime.go'))
  foreach($m in [regex]::Matches($runtimeSource,'ID: "(?<id>\w+)", Version: "(?<version>[^"]+)", URL: "(?<url>[^"]+)", SHA256: "(?<sha>[a-f0-9]{64})"')){
@@ -82,6 +88,6 @@ try{
  [IO.Compression.ZipFile]::CreateFromDirectory($stage,$zip,[IO.Compression.CompressionLevel]::Optimal,$false)
  $sum=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
  [IO.File]::WriteAllText((Join-Path $Output 'SHA256SUMS.txt'),($sum+'  '+[IO.Path]::GetFileName($zip)+"`n"),[Text.UTF8Encoding]::new($false))
- [IO.File]::WriteAllText((Join-Path $Output 'build-receipt.json'),(@{version=$version;archive=$zip;sha256=$sum;stage=$stage}|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+ [IO.File]::WriteAllText((Join-Path $Output 'build-receipt.json'),(@{version=$version;sourceCommit=$sourceCommit;archive=$zip;sha256=$sum;stage=$stage}|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
  Write-Output ('Packaged '+$zip+' SHA256 '+$sum)
 }finally{Pop-Location}

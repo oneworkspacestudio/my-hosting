@@ -50,6 +50,8 @@ namespace migration. SCM services, unattended boot before sign-in, another Windo
 machine and Windows Server Core have not been accepted. Existing installed apps
 remain under the normal Workspace update/optional-app workflow.
 
+[Live Express example](https://hosting-node-26-sites.m8e.co.uk/) · [Static example](https://hosting-demo-26-sites.m8e.co.uk/)
+
 ![Hosting opened using the existing Workspace sign-in](docs/screenshots/workspace-sso.png)
 
 ## Security scope

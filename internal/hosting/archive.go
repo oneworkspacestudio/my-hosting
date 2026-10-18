@@ -134,6 +134,7 @@ func extractTar(source, root string) error {
 	t := tar.NewReader(gz)
 	budget := archiveBudget{names: map[string]bool{}}
 	prefix := ""
+	metadata := 0
 	for {
 		h, e := t.Next()
 		if e == io.EOF {
@@ -141,6 +142,21 @@ func extractTar(source, root string) error {
 		}
 		if e != nil {
 			return e
+		}
+		// GitHub tarballs start with a PAX global comment identifying the
+		// revision. It is metadata, not a file outside the repository root.
+		// Never accept global path/link/size overrides or unbounded metadata.
+		if h.Typeflag == tar.TypeXGlobalHeader {
+			metadata++
+			if metadata > 16 || h.Size > 64<<10 {
+				return errors.New("Source archive metadata exceeds limits")
+			}
+			for key := range h.PAXRecords {
+				if key == "path" || key == "linkpath" || key == "size" {
+					return errors.New("Source archive has unsafe global path metadata")
+				}
+			}
+			continue
 		}
 		parts := strings.SplitN(h.Name, "/", 2)
 		if len(parts) < 2 {

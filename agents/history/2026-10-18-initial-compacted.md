@@ -265,3 +265,30 @@ Next: finish packaging, real GitHub Express deployment, source commits, publish
 accepted preview app asset, pin its verified digest in suite org lock/build-org,
 full bundle installer/catalog checks then paired preview release. No stable or
 SCM/other-machine claims. Preserve live C:/tmp/workspace and unrelated histories.
+
+
+## Final real GitHub and restart follow-up
+
+Pushed accepted source checkpoint a483058. Real GitHub Express fetch exposed
+GitHub's leading PAX global revision comment; extractor now accepts bounded
+non-path global metadata, still rejects traversal/overrides. Regression passes.
+Actual process restart exposed individually protected runtime child ACLs ignoring
+inheritable root grants. allowRuntime now reapplies per-project read/execute to
+every safe child. Native reset/restore/npm test passes14.11s. Generic framework
+restrictions remain unchanged; no write/secret permissions broadened.
+
+GitHub Express project4a871cc0d54b2867d202732b158721cc successfully installed68
+packages, built from pinned public commit a483058, and published deploy
+e24fe9a75fc731e445243bbd8fce0b53 at https://hosting-node-26-sites.m8e.co.uk.
+Earlier failed attempts retained; no failure claimed as success. Static demo
+latest republish f06c451eea0c38b68927993db05ee73c also published, prior preview
+remains active. Current public process receipt uses restart-candidate binary;
+upgrade it to final release bytes and verify Node survives actual manager restart.
+
+Local packaging script now generates attribution from compiled Go dependencies
+and frontend runtime licenses, JSON dependency inventory, three official runtime
+pins, compatibility and startup/docs/examples. Earlier script errors (unused
+module missing dir, Go VCS stamping and npm empty-key lock) fixed. First ZIP was
+only a packaging check and predates latest runtime fix; do not publish stale bytes.
+Full release regression including SSR is running externally. Suite build-org and
+catalog guard now require Hosting but lock still needs actual published digest.
