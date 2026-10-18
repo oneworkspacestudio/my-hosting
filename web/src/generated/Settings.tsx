@@ -33,7 +33,9 @@ export function Settings({ data, onAction }: { data: any; onAction: (name: strin
         <Row>
           <Button onClick={() => onAction("provisionRuntime")}>Download & verify runtime</Button>
           <Button variant="secondary" onClick={() => onAction("importRuntime")}>Import verified offline ZIP</Button>
+          <Button variant="secondary" onClick={() => onAction("repairRuntime")}>Repair runtime & restart apps</Button>
         </Row>
+        <Text variant="caption">Repair pauses affected apps, verifies a fresh official download and replaces a damaged runtime. It preserves site files, settings and secrets.</Text>
         <Text variant="caption">{data.runtimeStatus}</Text>
       </Card>
       <Card variant="form">
@@ -49,6 +51,8 @@ export function Settings({ data, onAction }: { data: any; onAction: (name: strin
         <Text variant="caption">Published artifacts needed by live routes and rollback references are preserved. Cleanup is explicit; backups are never treated as build cache.</Text>
         <Field label="Concurrent builds"><Select name="concurrency" options={data.concurrencyOptions} /></Field>
         <Button onClick={() => onAction("saveSettings")}>Save routing settings</Button>
+        <Button variant="secondary" onClick={() => onAction("cleanupStorage")}>Clean unused deployment files</Button>
+        <Text variant="caption">Keeps the newest deployments up to your target, live production, all active previews and their referenced source/artifacts. Older unused runtime files, build folders and logs can be deleted. Audit history, app data and backups remain.</Text>
       </Card>
       <Card>
         <Heading level={2}>Protected storage</Heading>
@@ -67,7 +71,7 @@ export function Settings({ data, onAction }: { data: any; onAction: (name: strin
         <Heading level={2}>Updates & background operation</Heading>
         <Text>Workspace installs compatible releases from the One Workspace Studio organization. Standalone users replace the stopped application with a verified release and retain the private-data folder.</Text>
         <Link href={data.releasesURL} external={true}>View verified release downloads ↗</Link>
-        <Text variant="caption">For Windows services, use a dedicated non-system account with access only to the Hosting folder. Executable builds fail closed under LocalSystem. See the Windows service guide.</Text>
+        <Text variant="caption">Workspace can start when your Windows user signs in. Standalone startup registration is included in the download. SCM services and unattended startup before login are not accepted in this preview. See the operations guide.</Text>
       </Card>
     </Page>
   )

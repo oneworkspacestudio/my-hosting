@@ -63,7 +63,7 @@ func provisionTestRuntime(t *testing.T, a *App, key string) {
 		t.Fatal(e)
 	}
 }
-func uploadFixture(t *testing.T, a *App, p Project, env string, files map[string]string) Deploy {
+func queueFixture(t *testing.T, a *App, p Project, env string, files map[string]string) Deploy {
 	t.Helper()
 	d, e := a.queued(p, "zip", p.Branch, "", env, "build", "", "", "acceptance")
 	if e != nil {
@@ -91,6 +91,11 @@ func uploadFixture(t *testing.T, a *App, p Project, env string, files map[string
 	if e = a.store.saveDeploy(d); e != nil {
 		t.Fatal(e)
 	}
+	return d
+}
+func uploadFixture(t *testing.T, a *App, p Project, env string, files map[string]string) Deploy {
+	t.Helper()
+	d := queueFixture(t, a, p, env, files)
 	a.execute(d)
 	result, e := a.store.deploy(d.ID)
 	if e != nil {
@@ -297,7 +302,10 @@ func TestNativeNodeAndControlIsolation(t *testing.T) {
 	build.Build = []string{"node", "build.js"}
 	build.Output = "dist"
 	_ = a.store.saveProject(build)
-	built := uploadFixture(t, a, build, "production", map[string]string{"build.js": `const fs=require('node:fs');fs.mkdirSync('dist');fs.writeFileSync('dist/index.html','Actual restricted build output');`})
+	// Child processes stay in the same restricted job. Windows' default named-
+	// pipe ACL does not grant our restricting SID: tools requiring piped stdio
+	// must use a documented in-process compiler (see the SSR examples).
+	built := uploadFixture(t, a, build, "production", map[string]string{"build.js": `const fs=require('node:fs'),cp=require('node:child_process');for(const stdio of ['inherit','ignore']){const result=cp.spawnSync(process.execPath,['-e','process.stdout.write("child-started")'],{stdio});if(result.error||result.status!==0)throw Error('Restricted child failed: '+stdio);}const pipe=cp.spawnSync(process.execPath,['-e','process.stdout.write("child-started")']);if(pipe.error&&pipe.error.code!=='EPERM')throw pipe.error;console.log('Child stdio pipe support:',pipe.error?'Windows restricting-SID limitation':'available');fs.mkdirSync('dist');fs.writeFileSync('dist/index.html','Actual restricted build output');`})
 	if built.State != "published" {
 		t.Fatal(built.State, built.Error)
 	}

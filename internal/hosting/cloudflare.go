@@ -69,6 +69,11 @@ func (a *App) ensureHostedRoute(ctx context.Context, d Deploy) error {
 	if len(tunnel) != 36 || strings.Trim(tunnel, "abcdefABCDEF0123456789-") != "" {
 		return errors.New("Workspace tunnel identifier is invalid")
 	}
+	unlock, e := acquireTunnelLock(ctx, a.cfg.SiteCFAccount, tunnel)
+	if e != nil {
+		return e
+	}
+	defer unlock()
 	var zone struct {
 		Name    string
 		Account struct{ ID string }

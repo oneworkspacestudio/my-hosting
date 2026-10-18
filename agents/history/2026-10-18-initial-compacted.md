@@ -216,3 +216,52 @@ Default tests skip heavy SSR unless explicitly enabled. C free22.74GiB at last c
 No commits beyond initial app36d469f yet; both worktrees have intended changes.
 Commit/push an explicitly unfinished source checkpoint after tests/log checks to
 preserve work on warning-state I. Paired release/install gates still incomplete.
+
+
+## Late 18 October corrective handoff (supersedes stale resume above)
+
+Latest pushed source checkpoint is e4827e0, not36d469f. The old running Nuxt lock/
+SSR sessions finished. Native Next16.4.2 and Nuxt4.6.2 both build and serve via
+Caddy; Nuxt uses pinned in-process Oxc instead of esbuild's denied named pipes.
+Full final Go suite passed192.843s (Next84.28/Nuxt40.90); verified archives under
+external tooling/my-hosting-work/downloads. WebSocket frame exchange and Node
+crash recovery passed11.06s. Cancellation now captures and waits descendant
+process handles, because job active-count0 can precede process-object signaling;
+strict immediate descendant-exit and unchanged-live-site checks pass8.24s.
+No escaped test process remained from the initial failed timing assertion.
+
+Implemented metrics single-connection deadlock fix, preview ZIP selection and
+republish guard, immutable retry env snapshots, preparation/cancellation/queue
+serialization, safe explicit retention, canonical redirects/HTTPS forwarding,
+verified staged runtime repair and a shared user/SYSTEM Cloudflare named mutex.
+The identical mutex in Workspace preserves simultaneous Vault/Hosting route
+updates. Framework runtime artifacts discard build-only dependencies. Sidebar
+return link no longer overlaps the suite switcher. Settings/operations explicitly
+state SCM service/other-machine/reboot/ServerCore acceptance is unavailable.
+
+Fresh synthetic suite install through actual Install helper passed with managed
+Accounts and Hosting, Caddy downloaded on first static deploy and no Node needed.
+Latest disposable root C:/Projects/.cache/myhosting-suite-acceptance-20261018,
+manager PID117584 (verify current receipt), localhost19300, provider19301,
+Hosting19317. New helper scripts/native-hosting-acceptance.go isolates APPDATA.
+Browser single sign-in opens Hosting; provider GET logout and remembered
+path-scoped app token fix passed actual browser flow; remaining Hosting sessions0.
+Full suite tests pass with GOTMPDIR on protected C: (Go1.27 t.TempDir uses
+GOTMPDIR, not just TEMP; external exFAT test failures were environment failures).
+Stop/remove this exact fixture after final testing, never owner live data.
+
+Public synthetic preview remains separate: localhost19007, Caddy19080; source
+root public-preview below the app acceptance parent. Managed production
+https://hosting-demo-26-sites.m8e.co.uk and browser-uploaded preview
+https://deploy-129e44ffb0--hosting-demo-26-sites.m8e.co.uk both served valid HTTPS
+and matching deployment headers. Existing tunnel/DNS preserved. Its process
+receipt outside Git is authoritative; old PID/binary above is stale. Upgrade
+preview deliberately and retain or remove exact owned public routes on cleanup.
+
+Added operational/startup docs, actual API specification, compatibility manifest,
+local packaging/notices/dependency inventory script and Express fixture. No
+Actions (both org repositories disabled). No release yet at this handoff.
+Next: finish packaging, real GitHub Express deployment, source commits, publish
+accepted preview app asset, pin its verified digest in suite org lock/build-org,
+full bundle installer/catalog checks then paired preview release. No stable or
+SCM/other-machine claims. Preserve live C:/tmp/workspace and unrelated histories.

@@ -1,6 +1,7 @@
 package hosting
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -247,6 +248,8 @@ func (a *App) domainAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 	if !requireAdmin(w, s) {
 		return
 	}
+	a.publishMu.Lock()
+	defer a.publishMu.Unlock()
 	if len(tail) == 0 && r.Method == "POST" {
 		var in struct {
 			Host string `json:"host"`
@@ -289,6 +292,51 @@ func (a *App) domainAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 	}
 	var d Domain
 	_ = json.Unmarshal([]byte(raw), &d)
+	if len(tail) == 2 && tail[1] == "canonical" && r.Method == "POST" {
+		var in struct {
+			Enabled bool `json:"enabled"`
+		}
+		if !readJSON(w, r, &in) {
+			return
+		}
+		if in.Enabled {
+			current, _ := a.store.project(p.ID)
+			live, e := a.store.deploy(current.Live)
+			if !d.Verified || d.HTTPS != "certificate-valid" || e != nil {
+				fail(w, 409, errors.New("Verify this domain's DNS and HTTPS and publish production before making it canonical"))
+				return
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
+			e = waitPublicSite(ctx, "https://"+d.Host+live.Snapshot.HealthPath, live.ID, nil)
+			cancel()
+			if e != nil {
+				fail(w, 409, errors.New("The custom HTTPS address is not serving the current production release. Check its DNS/tunnel route, then verify again"))
+				return
+			}
+		}
+		previous, e := a.domains(p.ID)
+		if e != nil {
+			fail(w, 500, dbError(e))
+			return
+		}
+		next := append([]Domain(nil), previous...)
+		for i := range next {
+			next[i].Canonical = in.Enabled && next[i].Host == d.Host
+		}
+		if e = a.storeDomains(next); e != nil {
+			fail(w, 500, dbError(e))
+			return
+		}
+		if e = a.reloadRoutes(r.Context(), nil); e != nil {
+			_ = a.storeDomains(previous)
+			fail(w, 409, e)
+			return
+		}
+		d.Canonical = in.Enabled
+		_ = a.store.audit(s.User.ID, p.ID, "domain.canonical", map[string]any{"host": d.Host, "enabled": in.Enabled})
+		jsonOut(w, 200, d)
+		return
+	}
 	if len(tail) == 2 && tail[1] == "verify" && r.Method == "POST" {
 		a.verifyDomain(r, &d)
 		if e := a.saveDomain(d); e != nil {
@@ -296,9 +344,7 @@ func (a *App) domainAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 			return
 		}
 		if d.Verified && a.settings().Public {
-			a.publishMu.Lock()
 			e := a.reloadRoutes(r.Context(), nil)
-			a.publishMu.Unlock()
 			if e != nil {
 				d.Error = e.Error()
 				_ = a.saveDomain(d)
@@ -314,9 +360,7 @@ func (a *App) domainAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 			fail(w, 500, dbError(e))
 			return
 		}
-		a.publishMu.Lock()
 		e = a.reloadRoutes(r.Context(), nil)
-		a.publishMu.Unlock()
 		if e != nil {
 			_ = a.saveDomain(d)
 			fail(w, 409, e)
@@ -328,8 +372,25 @@ func (a *App) domainAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 	}
 	http.NotFound(w, r)
 }
+
+func (a *App) storeDomains(domains []Domain) error {
+	tx, e := a.store.db.Begin()
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback()
+	for _, domain := range domains {
+		if _, e = tx.Exec("UPDATE domains SET detail=? WHERE host=? AND project_id=?", encode(domain), domain.Host, domain.ProjectID); e != nil {
+			return e
+		}
+	}
+	return tx.Commit()
+}
 func (a *App) metricsAPI(w http.ResponseWriter, r *http.Request, s Session, p Project) {
 	hosts := map[string]bool{p.Slug + ".localhost": true}
+	// SQLite uses one connection: never request settings while history rows
+	// still own that connection.
+	settings := a.settings()
 	rows, e := a.store.db.Query("SELECT detail FROM deployments WHERE project_id=? AND state='published'", p.ID)
 	if e == nil {
 		for rows.Next() {
@@ -337,7 +398,7 @@ func (a *App) metricsAPI(w http.ResponseWriter, r *http.Request, s Session, p Pr
 			var d Deploy
 			if rows.Scan(&raw) == nil && json.Unmarshal([]byte(raw), &d) == nil {
 				hosts[d.Snapshot.SlugHostLocal(d)] = true
-				hosts[a.siteHost(d)] = true
+				hosts[siteHostForSettings(d, settings)] = true
 			}
 		}
 		rows.Close()

@@ -23,6 +23,8 @@ Page Settings
     Row
       Button action=provisionRuntime "Download & verify runtime"
       Button variant=secondary action=importRuntime "Import verified offline ZIP"
+      Button variant=secondary action=repairRuntime "Repair runtime & restart apps"
+    Text variant=caption "Repair pauses affected apps, verifies a fresh official download and replaces a damaged runtime. It preserves site files, settings and secrets."
     Text variant=caption $runtimeStatus
   Card variant=form
     Heading level=2 "Routing & retention"
@@ -43,6 +45,8 @@ Page Settings
     Field label="Concurrent builds"
       Select name=concurrency options=$concurrencyOptions
     Button action=saveSettings "Save routing settings"
+    Button variant=secondary action=cleanupStorage "Clean unused deployment files"
+    Text variant=caption "Keeps the newest deployments up to your target, live production, all active previews and their referenced source/artifacts. Older unused runtime files, build folders and logs can be deleted. Audit history, app data and backups remain."
   Card
     Heading level=2 "Protected storage"
     Text variant=code $settings.dataPath
@@ -59,4 +63,4 @@ Page Settings
     Heading level=2 "Updates & background operation"
     Text "Workspace installs compatible releases from the One Workspace Studio organization. Standalone users replace the stopped application with a verified release and retain the private-data folder."
     Link href=$releasesURL external=true "View verified release downloads ↗"
-    Text variant=caption "For Windows services, use a dedicated non-system account with access only to the Hosting folder. Executable builds fail closed under LocalSystem. See the Windows service guide."
+    Text variant=caption "Workspace can start when your Windows user signs in. Standalone startup registration is included in the download. SCM services and unattended startup before login are not accepted in this preview. See the operations guide."

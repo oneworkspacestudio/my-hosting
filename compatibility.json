@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "application": "my-hosting",
+  "version": "0.1.0-preview.1",
+  "platform": "windows-amd64",
+  "minimumWorkspaceVersion": "0.3.0-preview.36",
+  "workspaceInstallerIntegration": 2,
+  "managementPortOffset": 17,
+  "route": "/hosting",
+  "oidcCallback": "/hosting/auth/callback",
+  "privateFilesystem": "NTFS",
+  "releaseChannel": "preview",
+  "securityScope": "trusted-administrators-and-projects",
+  "startup": "interactive-user-logon",
+  "scmServiceAccepted": false
+}

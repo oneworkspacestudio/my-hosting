@@ -305,6 +305,35 @@ type ProcessJob struct {
 	pid      uint32
 	waitDone chan struct{}
 	waitErr  error
+	closeErr error
+}
+
+var errProcessStop = errors.New("Windows process shutdown needs attention")
+
+func jobProcessHandles(job windows.Handle) ([]windows.Handle, error) {
+	var list struct {
+		Assigned, Count uint32
+		IDs             [32]uintptr
+	}
+	if e := windows.QueryInformationJobObject(job, windows.JobObjectBasicProcessIdList, uintptr(unsafe.Pointer(&list)), uint32(unsafe.Sizeof(list)), nil); e != nil {
+		return nil, e
+	}
+	if list.Count > 32 {
+		return nil, errors.New("Process list exceeded the configured job limit")
+	}
+	handles := []windows.Handle{}
+	for _, pid := range list.IDs[:list.Count] {
+		h, e := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
+		if e == nil {
+			handles = append(handles, h)
+		} else if e != windows.ERROR_INVALID_PARAMETER && e != windows.ERROR_NOT_FOUND {
+			for _, opened := range handles {
+				windows.CloseHandle(opened)
+			}
+			return nil, e
+		}
+	}
+	return handles, nil
 }
 
 func (j *ProcessJob) Close() {
@@ -313,6 +342,7 @@ func (j *ProcessJob) Close() {
 	}
 	j.once.Do(func() {
 		if j.handle != 0 {
+			handles, captureErr := jobProcessHandles(j.handle)
 			_ = windows.TerminateJobObject(j.handle, 1)
 			until := time.Now().Add(5 * time.Second)
 			for time.Now().Before(until) {
@@ -327,6 +357,24 @@ func (j *ProcessJob) Close() {
 			}
 			windows.CloseHandle(j.handle)
 			j.handle = 0
+			// Job active-count updates can precede the process object's final
+			// signal. Wait for the captured descendants as well, so a completed
+			// cancellation never reports success during asynchronous teardown.
+			for _, process := range handles {
+				remaining := time.Until(until)
+				wait := uint32(0)
+				if remaining > 0 {
+					wait = uint32(remaining.Milliseconds() + 1)
+				}
+				state, e := windows.WaitForSingleObject(process, wait)
+				windows.CloseHandle(process)
+				if e != nil || state != windows.WAIT_OBJECT_0 {
+					j.closeErr = fmt.Errorf("%w: a managed descendant did not exit within five seconds", errProcessStop)
+				}
+			}
+			if captureErr != nil {
+				j.closeErr = fmt.Errorf("%w: cannot verify job descendants: %v", errProcessStop, captureErr)
+			}
 		}
 	})
 }

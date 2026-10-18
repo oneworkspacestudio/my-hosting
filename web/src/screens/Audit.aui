@@ -11,4 +11,3 @@ Page Audit
         Badge tone=muted $item.action
         Text variant=caption $item.at
       Text variant=code $item.summary
-

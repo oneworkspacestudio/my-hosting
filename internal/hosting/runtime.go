@@ -79,7 +79,8 @@ func (m *runtimeManager) ready(key string) error {
 	}
 	return nil
 }
-func (m *runtimeManager) provision(ctx context.Context, key, offline string, report func(string)) error {
+func (m *runtimeManager) provision(ctx context.Context, key, offline string, report func(string), replace ...bool) error {
+	repair := len(replace) > 0 && replace[0]
 	m.gateOnce.Do(func() { m.gate = make(chan struct{}, 1) })
 	select {
 	case m.gate <- struct{}{}:
@@ -91,7 +92,7 @@ func (m *runtimeManager) provision(ctx context.Context, key, offline string, rep
 	if !ok {
 		return errors.New("Unknown runtime")
 	}
-	if m.ready(key) == nil {
+	if m.ready(key) == nil && !repair {
 		return nil
 	}
 	if report == nil {
@@ -163,11 +164,31 @@ func (m *runtimeManager) provision(ctx context.Context, key, offline string, rep
 		return e
 	}
 	dest := m.path(key)
+	previous := ""
 	if _, e = os.Stat(dest); e == nil {
-		return errors.New("An incomplete runtime directory already exists. Stop its processes and use repair before replacing it")
+		if !repair {
+			return errors.New("An incomplete runtime directory exists. Choose Repair runtime in Settings to replace it with a verified archive")
+		}
+		if _, e = treeSize(dest); e != nil {
+			return errors.New("The runtime folder contains an unsafe link; inspect it before repair")
+		}
+		previous = filepath.Join(m.root, "previous-"+key+"-"+id())
+		if e = os.Rename(dest, previous); e != nil {
+			return errors.New("Cannot replace the runtime. Stop other programs using it and check Windows permissions, then retry repair")
+		}
 	}
 	if e = os.Rename(stage, dest); e != nil {
+		if previous != "" {
+			if restoreErr := os.Rename(previous, dest); restoreErr != nil {
+				return fmt.Errorf("Runtime replacement failed and recovery needs attention: %w", restoreErr)
+			}
+		}
 		return e
+	}
+	if previous != "" {
+		if e = os.RemoveAll(previous); e != nil {
+			report("Runtime is ready; previous runtime cleanup needs attention: " + previous)
+		}
 	}
 	report(key + " is ready")
 	return nil
@@ -254,10 +275,10 @@ func (m *runtimeManager) summary() []map[string]any {
 	for _, key := range []string{"caddy", "node22", "node24"} {
 		pin := runtimePins[key]
 		state := "not installed"
-		if m.ready(key) == nil {
-			state = "ready"
-		} else if m.status[key] != "" {
+		if m.status[key] != "" && m.status[key] != "ready" {
 			state = m.status[key]
+		} else if m.ready(key) == nil {
+			state = "ready"
 		}
 		out = append(out, map[string]any{"id": key, "version": pin.Version, "state": state, "source": pin.URL, "sha256": pin.SHA256})
 	}

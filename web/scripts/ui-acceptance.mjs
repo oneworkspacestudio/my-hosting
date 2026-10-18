@@ -35,4 +35,3 @@ try{
  check('No uncaught browser errors',errors.length===0);
  await writeFile(path.join(work,'ui-first-acceptance.json'),JSON.stringify({checks,errors,fixture:'isolated synthetic standalone',projectId:project.id,slug},null,2));console.log(JSON.stringify({checks:checks.length,errors:errors.length}));
 }finally{await context.close();}
-

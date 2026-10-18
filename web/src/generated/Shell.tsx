@@ -25,7 +25,9 @@ export function Shell({ data, onAction }: { data: any; onAction: (name: string) 
           <Text variant="caption">Your projects. Your server.</Text>
           <Text variant="caption">Trusted source only</Text>
         </Card>
-        <Link href={data.workspaceURL} variant="nav">← One Workspace</Link>
+        {data.workspaceLinked && (
+          <Link href={data.workspaceURL} variant="nav">← One Workspace</Link>
+        )}
       </Stack>
       <Stack variant="workspace">
         <Row variant="topbar">

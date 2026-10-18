@@ -1,0 +1,2611 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "My Hosting API",
+    "version": "0.1.0-preview.1",
+    "description": "Cookie-authenticated same-origin API. Prefix every path with /hosting behind Workspace. Write requests require exact configured Origin plus X-CSRF-Token from /api/me; authentication/bootstrap use their dedicated controls. Trusted administrator preview. See OPERATIONS.md."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:9007"
+    },
+    {
+      "url": "https://workspace.example.com/hosting"
+    }
+  ],
+  "security": [
+    {
+      "browserSession": []
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Process health",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "security": []
+      }
+    },
+    "/auth/login": {
+      "get": {
+        "summary": "Begin OIDC authorization code + PKCE flow",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "security": []
+      }
+    },
+    "/auth/callback": {
+      "get": {
+        "summary": "Complete validated OIDC flow",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "security": [],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Revoke current Hosting browser session",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ]
+      }
+    },
+    "/api/bootstrap-status": {
+      "get": {
+        "summary": "Check whether first-run standalone setup is available",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "security": []
+      }
+    },
+    "/auth/bootstrap": {
+      "post": {
+        "summary": "Consume one-use standalone setup link",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/local": {
+      "post": {
+        "summary": "Standalone sign-in (disabled when OIDC is configured)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me": {
+      "get": {
+        "summary": "Current identity, effective role, CSRF token and publication settings",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        }
+      }
+    },
+    "/api/projects": {
+      "get": {
+        "summary": "List projects visible to this identity",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create project (administrator)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}": {
+      "get": {
+        "summary": "Read project and effective project role",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "summary": "Update project; site slug is permanent (administrator)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/deployments": {
+      "get": {
+        "summary": "Deployment history, 30 records per page",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Queue immutable GitHub revision or upload ZIP; developer or higher",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          },
+          "202": {
+            "description": "Deployment durably queued or already admitted for this idempotency key"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "branch": {
+                    "type": "string"
+                  },
+                  "commit": {
+                    "type": "string"
+                  },
+                  "environment": {
+                    "type": "string",
+                    "enum": [
+                      "production",
+                      "preview"
+                    ]
+                  },
+                  "clearCache": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "application/zip": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              },
+              "description": "ZIP upload up to 64 MiB; environment query selects production or preview."
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/deployments/{deployId}": {
+      "get": {
+        "summary": "Read deployment and immutable configuration snapshot",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deployId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{projectId}/deployments/{deployId}/cancel": {
+      "post": {
+        "summary": "Cancel preparing, queued or running job and stop its descendants",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deployId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/deployments/{deployId}/retry": {
+      "post": {
+        "summary": "Retry original source/configuration/environment snapshot",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deployId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/deployments/{deployId}/rebuild": {
+      "post": {
+        "summary": "Rebuild retained source with current project settings",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deployId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/deployments/{deployId}/republish": {
+      "post": {
+        "summary": "Republish retained artifact, preserving environment",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deployId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/deployments/{deployId}/rollback": {
+      "post": {
+        "summary": "Restore retained production artifact",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deployId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/deployments/{deployId}/promote": {
+      "post": {
+        "summary": "Promote preview artifact to production",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deployId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/deployments/{deployId}/logs": {
+      "get": {
+        "summary": "Download redacted deployment log (text/plain)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deployId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{projectId}/deployments/{deployId}/events": {
+      "get": {
+        "summary": "Server-sent events with log/state updates (text/event-stream)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deployId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{projectId}/domains": {
+      "get": {
+        "summary": "List domains",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Add custom domain (administrator)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "host": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/domains/{host}": {
+      "delete": {
+        "summary": "Remove custom domain binding (administrator)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ]
+      }
+    },
+    "/api/projects/{projectId}/domains/{host}/verify": {
+      "post": {
+        "summary": "Verify DNS ownership, TLS and public revision",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/domains/{host}/canonical": {
+      "post": {
+        "summary": "Enable/disable verified canonical host",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/secrets": {
+      "get": {
+        "summary": "List secret names only",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "summary": "Set/delete project environment secret (administrator)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "environment": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Set/delete project environment secret (administrator)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "environment": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/github": {
+      "get": {
+        "summary": "GitHub connection and webhook status; no credential values",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Save scoped fine-grained PAT and/or rotate webhook secret (administrator)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  },
+                  "rotateWebhook": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/github/detect": {
+      "get": {
+        "summary": "Read GitHub detect",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{projectId}/github/branches": {
+      "get": {
+        "summary": "Read GitHub branches",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{projectId}/github/commits": {
+      "get": {
+        "summary": "Read GitHub commits",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "branch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/hooks/github/{projectId}": {
+      "post": {
+        "summary": "HMAC-signed GitHub push webhook; no browser session",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "security": [],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "description": "Requires X-Hub-Signature-256, X-GitHub-Event and X-GitHub-Delivery. Repository, branch and SHA are checked. Sender should retry temporary admission failures."
+      }
+    },
+    "/api/projects/{projectId}/members": {
+      "get": {
+        "summary": "Project membership (administrator for changes)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "summary": "Project membership (administrator for changes)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "viewer",
+                      "developer",
+                      "admin"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Project membership (administrator for changes)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "viewer",
+                      "developer",
+                      "admin"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/process": {
+      "get": {
+        "summary": "Actual supervised Node process status",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Start, stop or restart production Node process",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "start",
+                      "stop",
+                      "restart"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/process/logs": {
+      "get": {
+        "summary": "Redacted Node process log",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/projects/{projectId}/metrics": {
+      "get": {
+        "summary": "Measured Caddy access-log traffic, bounded recent sample",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/team": {
+      "get": {
+        "summary": "Known MyAccounts identities (administrator)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        }
+      }
+    },
+    "/api/team/{userId}": {
+      "put": {
+        "summary": "Owner changes global role; configured owner cannot be demoted",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "viewer",
+                      "disabled"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audit": {
+      "get": {
+        "summary": "Hash-chained audit history, newest 100",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "summary": "Global routing, storage and runtime settings (administrator)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        }
+      },
+      "put": {
+        "summary": "Save routing/concurrency/retention settings",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "caddyPort": {
+                    "type": "integer"
+                  },
+                  "public": {
+                    "type": "boolean"
+                  },
+                  "previewDomain": {
+                    "type": "string"
+                  },
+                  "transport": {
+                    "type": "string",
+                    "enum": [
+                      "direct",
+                      "tunnel"
+                    ]
+                  },
+                  "addressStyle": {
+                    "type": "string",
+                    "enum": [
+                      "flat",
+                      "nested"
+                    ]
+                  },
+                  "retain": {
+                    "type": "integer"
+                  },
+                  "concurrency": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runtimes": {
+      "get": {
+        "summary": "Pinned runtime verification and provisioning status (administrator)",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        }
+      }
+    },
+    "/api/runtimes/{runtime}": {
+      "post": {
+        "summary": "Provision/repair pinned official runtime; optional exact offline ZIP",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "runtime",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          },
+          {
+            "name": "repair",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/zip": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "description": "Omit body to download official pinned ZIP. repair=1 stages replacement before pausing/switching affected runtimes."
+        }
+      }
+    },
+    "/api/storage/cleanup": {
+      "post": {
+        "summary": "Explicit maintenance cleanup preserving active routes/app data/backups",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/backups": {
+      "post": {
+        "summary": "Export password-encrypted consistent archive; pauses managed processes",
+        "responses": {
+          "200": {
+            "description": "Encrypted binary archive"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "403": {
+            "description": "Insufficient permission or invalid CSRF/Origin"
+          },
+          "409": {
+            "description": "State conflict or maintenance"
+          },
+          "500": {
+            "description": "Operation failed"
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session-bound token from GET /api/me. Send the exact configured Origin header."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "browserSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "myhosting_session"
+      }
+    },
+    "schemas": {
+      "ProjectInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "adapter": {
+            "type": "string",
+            "enum": [
+              "static",
+              "node",
+              "next",
+              "nuxt"
+            ]
+          },
+          "nodeMajor": {
+            "type": "integer",
+            "enum": [
+              22,
+              24
+            ]
+          },
+          "install": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "build": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "start": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "output": {
+            "type": "string"
+          },
+          "baseDirectory": {
+            "type": "string"
+          },
+          "healthPath": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer"
+          },
+          "memoryMB": {
+            "type": "integer"
+          },
+          "diskMB": {
+            "type": "integer"
+          },
+          "previews": {
+            "type": "boolean"
+          },
+          "trusted": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

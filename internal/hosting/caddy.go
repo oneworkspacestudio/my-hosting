@@ -10,7 +10,9 @@ import (
 )
 
 func (a *App) siteHost(d Deploy) string {
-	s := a.settings()
+	return siteHostForSettings(d, a.settings())
+}
+func siteHostForSettings(d Deploy, s Settings) string {
 	suffix := "localhost"
 	if s.PreviewDomain != "" {
 		suffix = s.PreviewDomain
@@ -40,15 +42,58 @@ func (a *App) caddyState() map[string]any {
 	}
 	return map[string]any{"state": state, "error": a.caddyError, "adminAPI": "mutual TLS on loopback; unauthenticated admin disabled", "scope": "One owned instance; external Caddy instances are never adopted"}
 }
-func (a *App) route(d Deploy, hosts []string) map[string]any {
+func (a *App) route(d Deploy, hosts []string, publicHTTPS ...bool) map[string]any {
 	handlers := []any{map[string]any{"handler": "headers", "response": map[string]any{"set": map[string][]string{"X-MyHosting-Deploy": {d.ID}, "X-Content-Type-Options": {"nosniff"}}}}}
 	if d.Snapshot.Adapter == "static" {
 		root := filepath.Join(a.releaseRoot(d), filepath.FromSlash(sourceBase(d.Snapshot)), filepath.FromSlash(d.Snapshot.Output))
 		handlers = append(handlers, map[string]any{"handler": "vars", "root": root}, map[string]any{"handler": "file_server", "hide": []string{".git", ".env", ".env.*"}})
 	} else {
-		handlers = append(handlers, map[string]any{"handler": "reverse_proxy", "upstreams": []any{map[string]any{"dial": fmt.Sprintf("127.0.0.1:%d", d.Port)}}, "headers": map[string]any{"request": map[string]any{"set": map[string][]string{"X-Forwarded-Proto": {"{http.request.scheme}"}}}}})
+		proto := "{http.request.scheme}"
+		if len(publicHTTPS) > 0 && publicHTTPS[0] {
+			proto = "https"
+		}
+		handlers = append(handlers, map[string]any{"handler": "reverse_proxy", "upstreams": []any{map[string]any{"dial": fmt.Sprintf("127.0.0.1:%d", d.Port)}}, "headers": map[string]any{"request": map[string]any{"set": map[string][]string{"X-Forwarded-Proto": {proto}}}}})
 	}
 	return map[string]any{"match": []any{map[string]any{"host": hosts}}, "handle": handlers, "terminal": true}
+}
+
+func (a *App) publicProjectRoutes(d Deploy, s Settings) ([]any, error) {
+	hosts := []string{}
+	if s.PreviewDomain != "" {
+		hosts = append(hosts, siteHostForSettings(d, s))
+	}
+	canonical := ""
+	if d.Environment == "production" {
+		domains, e := a.domains(d.ProjectID)
+		if e != nil {
+			return nil, e
+		}
+		for _, domain := range domains {
+			if domain.Verified {
+				hosts = append(hosts, domain.Host)
+				if domain.Canonical {
+					canonical = domain.Host
+				}
+			}
+		}
+	}
+	if len(hosts) == 0 {
+		return nil, nil
+	}
+	if canonical == "" {
+		return []any{a.route(d, hosts, true)}, nil
+	}
+	aliases := []string{}
+	for _, host := range hosts {
+		if host != canonical {
+			aliases = append(aliases, host)
+		}
+	}
+	routes := []any{a.route(d, []string{canonical}, true)}
+	if len(aliases) > 0 {
+		routes = append(routes, map[string]any{"match": []any{map[string]any{"host": aliases}}, "handle": []any{map[string]any{"handler": "static_response", "status_code": 308, "headers": map[string][]string{"Location": {"https://" + canonical + "{http.request.uri}"}, "X-MyHosting-Deploy": {d.ID}}}}, "terminal": true})
+	}
+	return routes, nil
 }
 func (a *App) routing(incoming *Deploy) (map[string]any, error) {
 	s := a.settings()
@@ -90,33 +135,23 @@ func (a *App) routing(incoming *Deploy) (map[string]any, error) {
 			continue
 		}
 		local = append(local, a.route(d, []string{d.Snapshot.SlugHostLocal(d)}))
-		if s.Public && s.PreviewDomain != "" {
-			public = append(public, a.route(d, []string{a.siteHost(d)}))
-		}
-		if d.Environment == "production" && s.Public {
-			hosts, e := a.verifiedDomains(p.ID)
+		if s.Public {
+			routes, e := a.publicProjectRoutes(d, s)
 			if e != nil {
 				return nil, e
 			}
-			if len(hosts) > 0 {
-				public = append(public, a.route(d, hosts))
-			}
+			public = append(public, routes...)
 		}
 	}
 	if incoming != nil {
 		d := *incoming
 		local = append(local, a.route(d, []string{d.Snapshot.SlugHostLocal(d)}))
-		if s.Public && s.PreviewDomain != "" {
-			public = append(public, a.route(d, []string{a.siteHost(d)}))
-		}
-		if d.Environment == "production" && s.Public {
-			hosts, e := a.verifiedDomains(d.ProjectID)
+		if s.Public {
+			routes, e := a.publicProjectRoutes(d, s)
 			if e != nil {
 				return nil, e
 			}
-			if len(hosts) > 0 {
-				public = append(public, a.route(d, hosts))
-			}
+			public = append(public, routes...)
 		}
 	}
 	if s.Public && s.Transport == "tunnel" {

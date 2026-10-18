@@ -23,7 +23,11 @@ func (a *App) notify() {
 	default:
 	}
 }
-func (a *App) queued(p Project, source, branch, sha, environment, action, parent, key, actor string) (Deploy, error) {
+func (a *App) queued(p Project, source, branch, sha, environment, action, parent, key, actor string, prepare ...bool) (Deploy, error) {
+	if !a.jobsGate.TryRLock() {
+		return Deploy{}, errors.New("Hosting maintenance is in progress. Wait for runtime setup, backup or cleanup to finish, then retry")
+	}
+	defer a.jobsGate.RUnlock()
 	if environment != "production" && environment != "preview" {
 		return Deploy{}, errors.New("Choose production or preview")
 	}
@@ -45,7 +49,7 @@ func (a *App) queued(p Project, source, branch, sha, environment, action, parent
 		return Deploy{}, e
 	}
 	var count int
-	_ = a.store.db.QueryRow("SELECT COUNT(*) FROM deployments WHERE state IN ('uploading','queued','building','publishing')").Scan(&count)
+	_ = a.store.db.QueryRow("SELECT COUNT(*) FROM deployments WHERE state IN ('preparing','uploading','queued','building','publishing')").Scan(&count)
 	if count >= 100 {
 		return Deploy{}, errors.New("Deployment queue is full; wait for a job or cancel queued work")
 	}
@@ -53,6 +57,9 @@ func (a *App) queued(p Project, source, branch, sha, environment, action, parent
 	d.Snapshot.Role = ""
 	if source == "zip" && action == "build" {
 		d.State = "uploading"
+	}
+	if len(prepare) > 0 && prepare[0] {
+		d.State = "preparing"
 	}
 	values, e := a.secretValues(p.ID, environment)
 	if e != nil {
@@ -103,7 +110,7 @@ func (a *App) queueGit(ctx context.Context, p Project, branch, sha, environment,
 	return d, e
 }
 func (a *App) recoverJobs() error {
-	rows, e := a.store.db.Query("SELECT detail FROM deployments WHERE state IN ('uploading','building','publishing')")
+	rows, e := a.store.db.Query("SELECT detail FROM deployments WHERE state IN ('preparing','uploading','building','publishing')")
 	if e != nil {
 		return e
 	}
@@ -187,16 +194,20 @@ func (a *App) execute(d Deploy) {
 	defer a.jobsGate.RUnlock()
 	ctx, cancel := context.WithTimeout(a.ctx, time.Duration(d.Snapshot.Timeout)*time.Second)
 	a.jobsMu.Lock()
-	a.active[d.ID] = cancel
-	a.jobsMu.Unlock()
-	defer func() { cancel(); a.jobsMu.Lock(); delete(a.active, d.ID); a.jobsMu.Unlock() }()
 	fresh, e := a.store.deploy(d.ID)
 	if e != nil || fresh.State != "queued" {
+		a.jobsMu.Unlock()
+		cancel()
 		return
 	}
+	d = fresh
+	a.active[d.ID] = cancel
 	d.State = "building"
 	d.Started = now()
-	if e = a.store.saveDeploy(d); e != nil {
+	e = a.store.saveDeploy(d)
+	a.jobsMu.Unlock()
+	defer func() { cancel(); a.jobsMu.Lock(); delete(a.active, d.ID); a.jobsMu.Unlock() }()
+	if e != nil {
 		return
 	}
 	env, e := a.deployEnv(d)
@@ -313,7 +324,12 @@ func (a *App) execute(d Deploy) {
 			if e = os.MkdirAll(filepath.Dir(dest), 0700); e != nil {
 				return e
 			}
-			if e = os.Rename(work, dest); e != nil {
+			report("Preparing immutable runtime artifact")
+			if e = stageFrameworkRelease(work, dest, d.Snapshot); e != nil {
+				return e
+			}
+			d.Bytes, e = treeSize(dest)
+			if e != nil {
 				return e
 			}
 			if e = freezeArtifact(dest, d.ProjectID); e != nil {
@@ -358,15 +374,25 @@ func (a *App) execute(d Deploy) {
 				return errors.New("The public HTTPS address is not ready. Check DNS/tunnel status; the prior release is retained")
 			}
 		}
+		a.jobsMu.Lock()
+		if ctx.Err() != nil {
+			a.jobsMu.Unlock()
+			_ = a.applyCaddyConfig(context.Background(), fallback)
+			return ctx.Err()
+		}
 		d.State = "published"
 		d.Finished = now()
 		d.URL = a.deployURL(d)
 		p, e := a.store.project(d.ProjectID)
 		if e != nil {
+			a.jobsMu.Unlock()
+			_ = a.applyCaddyConfig(context.Background(), fallback)
 			return e
 		}
 		previous := p.Live
-		if e = a.store.publish(d, p, previous); e != nil {
+		e = a.store.publish(d, p, previous)
+		a.jobsMu.Unlock()
+		if e != nil {
 			_ = a.applyCaddyConfig(context.Background(), fallback)
 			return e
 		}
@@ -384,6 +410,10 @@ func (a *App) execute(d Deploy) {
 		if ctx.Err() != nil {
 			d.State = "cancelled"
 			d.Error = "Deployment cancelled or its time limit expired. The previous healthy release is retained."
+			if errors.Is(e, errProcessStop) {
+				d.State = "failed"
+				d.Error = e.Error()
+			}
 		}
 		d.Error = logger.Redact(d.Error)
 		d.Finished = now()
@@ -441,7 +471,10 @@ func (a *App) runBuild(ctx context.Context, d Deploy, work string, args []string
 			return e
 		case <-ctx.Done():
 			j.Close()
-			<-done
+			stopErr := <-done
+			if errors.Is(stopErr, errProcessStop) {
+				return stopErr
+			}
 			return ctx.Err()
 		case <-timer.C:
 			bytes, e := treeSize(a.workspace(d))
@@ -573,23 +606,30 @@ func (a *App) deployAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 			f, e := os.OpenFile(dest, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 			if e == nil {
 				_, e = io.Copy(f, r.Body)
-				f.Close()
+				if e == nil {
+					e = f.Sync()
+				}
+				closeErr := f.Close()
+				if e == nil {
+					e = closeErr
+				}
 			}
 			if e != nil {
-				d.State = "failed"
-				d.Error = "ZIP upload failed or exceeded 64 MiB"
-				d.Finished = now()
-				_ = a.store.saveDeploy(d)
-				fail(w, 400, errors.New(d.Error))
+				a.failPreparation(d, "ZIP upload failed or exceeded 64 MiB")
+				fail(w, 400, errors.New("ZIP upload failed or exceeded 64 MiB"))
 				return
 			}
 			d.SourceHash, e = hashFile(dest)
-			d.State = "queued"
 			if e != nil {
+				a.failPreparation(d, "The uploaded source could not be verified")
 				fail(w, 500, dbError(e))
 				return
 			}
-			_ = a.store.saveDeploy(d)
+			d, e = a.finishPreparation(d)
+			if e != nil {
+				fail(w, 409, e)
+				return
+			}
 			a.notify()
 			jsonOut(w, 202, d)
 			return
@@ -659,25 +699,41 @@ func (a *App) deployAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 	}
 	if action == "cancel" {
 		a.jobsMu.Lock()
+		current, readErr := a.store.deploy(d.ID)
+		if readErr != nil || (current.State != "queued" && current.State != "preparing" && current.State != "uploading" && current.State != "building" && current.State != "publishing") {
+			a.jobsMu.Unlock()
+			fail(w, 409, errors.New("This deployment has already finished"))
+			return
+		}
+		d = current
 		cancel := a.active[d.ID]
 		if cancel != nil {
 			cancel()
 		}
-		a.jobsMu.Unlock()
-		if d.State == "queued" {
+		if d.State == "queued" || d.State == "uploading" || d.State == "preparing" {
 			d.State = "cancelled"
 			d.Finished = now()
 			d.Error = "Cancelled before the build started"
-			_ = a.store.saveDeploy(d)
+			if e = a.store.saveDeploy(d); e != nil {
+				a.jobsMu.Unlock()
+				fail(w, 500, dbError(e))
+				return
+			}
 		} else if cancel == nil {
+			a.jobsMu.Unlock()
 			fail(w, 409, errors.New("This deployment has already finished"))
 			return
 		}
+		a.jobsMu.Unlock()
 		_ = a.store.audit(s.User.ID, p.ID, "deploy.cancel", map[string]string{"deploy": d.ID})
 		jsonOut(w, 202, map[string]string{"state": "cancelling"})
 		return
 	}
 	if action == "rollback" || action == "promote" || action == "republish" {
+		if action == "rollback" && d.Environment != "production" {
+			fail(w, 400, errors.New("Restore a production release, or use Promote preview for a preview artifact"))
+			return
+		}
 		if action == "promote" && d.Environment != "preview" {
 			fail(w, 400, errors.New("Only a preview release can be promoted"))
 			return
@@ -690,7 +746,11 @@ func (a *App) deployAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 			fail(w, 409, errors.New("Choose a successful retained release"))
 			return
 		}
-		next, e := a.queued(d.Snapshot, d.Source, d.Branch, d.Commit, "production", action, d.ID, "", s.User.ID)
+		environment := "production"
+		if action == "republish" {
+			environment = d.Environment
+		}
+		next, e := a.queued(d.Snapshot, d.Source, d.Branch, d.Commit, environment, action, d.ID, "", s.User.ID)
 		if e != nil {
 			fail(w, 400, e)
 			return
@@ -708,33 +768,59 @@ func (a *App) deployAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 		if action == "rebuild" {
 			snapshot = p
 		}
-		next, e := a.queued(snapshot, d.Source, d.Branch, d.Commit, d.Environment, "build", d.ID, "", s.User.ID)
+		if d.Source == "zip" {
+			info, e := os.Stat(a.sourceForRead(d))
+			if e != nil || !info.Mode().IsRegular() {
+				fail(w, 409, errors.New("The source ZIP is no longer retained; upload it again"))
+				return
+			}
+		}
+		next, e := a.queued(snapshot, d.Source, d.Branch, d.Commit, d.Environment, "build", d.ID, "", s.User.ID, true)
 		if e != nil {
 			fail(w, 400, e)
 			return
 		}
+		if action == "retry" {
+			if _, e = a.store.db.Exec("UPDATE deployment_env SET value=(SELECT value FROM deployment_env WHERE deploy_id=?) WHERE deploy_id=?", d.ID, next.ID); e != nil {
+				a.failPreparation(next, "The original environment snapshot is unavailable")
+				fail(w, 500, errors.New("The original environment snapshot is unavailable"))
+				return
+			}
+		}
 		if d.Source == "zip" {
 			in, e := os.Open(a.sourceForRead(d))
 			if e != nil {
+				a.failPreparation(next, "The source ZIP is no longer retained; upload it again")
 				fail(w, 409, errors.New("The source ZIP is no longer retained; upload it again"))
 				return
 			}
 			out, e := os.Create(a.sourcePath(next))
 			if e != nil {
 				in.Close()
+				a.failPreparation(next, "Could not prepare the retained source ZIP")
 				fail(w, 500, dbError(e))
 				return
 			}
 			_, e = io.Copy(out, in)
-			out.Close()
+			if e == nil {
+				e = out.Sync()
+			}
+			closeErr := out.Close()
+			if e == nil {
+				e = closeErr
+			}
 			in.Close()
 			if e != nil {
+				a.failPreparation(next, "Could not copy the retained source ZIP")
 				fail(w, 500, dbError(e))
 				return
 			}
 			next.SourceHash = d.SourceHash
-			next.State = "queued"
-			_ = a.store.saveDeploy(next)
+		}
+		next, e = a.finishPreparation(next)
+		if e != nil {
+			fail(w, 409, e)
+			return
 		}
 		a.notify()
 		jsonOut(w, 202, next)
@@ -748,7 +834,44 @@ func environmentQuery(r *http.Request) string {
 	}
 	return "production"
 }
+
+func (a *App) failPreparation(d Deploy, message string) {
+	a.jobsMu.Lock()
+	defer a.jobsMu.Unlock()
+	current, e := a.store.deploy(d.ID)
+	if e != nil || (current.State != "preparing" && current.State != "uploading") {
+		return
+	}
+	current.State = "failed"
+	current.Error = message
+	current.Finished = now()
+	_ = a.store.saveDeploy(current)
+}
+
+func (a *App) finishPreparation(d Deploy) (Deploy, error) {
+	a.jobsMu.Lock()
+	defer a.jobsMu.Unlock()
+	current, e := a.store.deploy(d.ID)
+	if e != nil {
+		return d, e
+	}
+	if current.State == "cancelled" {
+		if d.Source == "zip" {
+			_ = os.Remove(a.sourcePath(d))
+		}
+		return current, nil
+	}
+	if current.State != "uploading" && current.State != "preparing" {
+		return current, errors.New("This deployment is no longer awaiting source preparation")
+	}
+	d.State = "queued"
+	return d, a.store.saveDeploy(d)
+}
 func (a *App) clearBuildCache(pid string) error {
+	if !a.jobsGate.TryLock() {
+		return errors.New("Wait for active deployments or maintenance before clearing cache")
+	}
+	defer a.jobsGate.Unlock()
 	a.jobsMu.Lock()
 	busy := len(a.active) > 0
 	a.jobsMu.Unlock()
@@ -808,7 +931,7 @@ func (a *App) logAPI(w http.ResponseWriter, r *http.Request, s Session, d Deploy
 		}
 		fmt.Fprintf(w, "data: %s\n\n", encode(map[string]any{"deploy": current, "text": chunk, "offset": offset}))
 		flusher.Flush()
-		if current.State != "queued" && current.State != "building" && current.State != "publishing" {
+		if current.State != "queued" && current.State != "preparing" && current.State != "uploading" && current.State != "building" && current.State != "publishing" {
 			return
 		}
 		select {

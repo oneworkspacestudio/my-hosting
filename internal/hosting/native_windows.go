@@ -186,7 +186,9 @@ func nativeStart(cmd *exec.Cmd, j *ProcessJob, token windows.Token, restricted b
 		j.Close()
 		<-ioDone
 		closeDesktop()
-		if e != nil {
+		if j.closeErr != nil {
+			j.waitErr = j.closeErr
+		} else if e != nil {
 			j.waitErr = e
 		} else if code != 0 {
 			j.waitErr = fmt.Errorf("Managed process exited with code 0x%x", code)

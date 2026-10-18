@@ -12,3 +12,10 @@ static/public assets into the standalone output before freezing the artifact.
 Run native tests with verified official Caddy/Node ZIPs in
 `MYHOSTING_RUNTIME_CACHE` (caddy.zip/node24.zip). Set `MYHOSTING_SSR=1` to include
 the larger, network-dependent framework builds. Never target owner installations.
+
+For Nuxt use the Nuxt adapter with the same install/build/limits and the supplied
+in-process compiler config; see ../docs/FRAMEWORKS.md. For Express use Node,
+base directory `examples/express` when connecting this repository, install
+`["npm","ci","--ignore-scripts"]`, start `["node","server.cjs"]`, output `.`,
+health `/healthz`, and Node 24. Never include the repository's root web dependency
+installation in the deployed app.

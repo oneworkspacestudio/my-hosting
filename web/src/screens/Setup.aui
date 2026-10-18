@@ -14,4 +14,3 @@ Page Setup
       Input name=setupConfirm type=password autoComplete=new-password
     Button action=bootstrap "Create administrator & open Hosting"
     Text variant=caption "Workspace installations connect through MyAccounts automatically and do not create another password."
-

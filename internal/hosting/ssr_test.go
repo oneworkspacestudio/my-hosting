@@ -70,6 +70,12 @@ func TestNativeSSRFrameworkBuilds(t *testing.T) {
 				raw, _ := os.ReadFile(filepath.Join(a.cfg.Data, "logs", d.ID+".log"))
 				t.Fatal(d.Error, string(raw))
 			}
+			if _, e := os.Stat(filepath.Join(a.releaseRoot(d), "node_modules")); !os.IsNotExist(e) {
+				t.Fatal("Build-only dependencies were retained at the release root", e)
+			}
+			if d.Bytes <= 0 || d.Bytes > 300<<20 {
+				t.Fatal("Unexpected framework runtime artifact size", d.Bytes)
+			}
 			code, body := getSite(t, port, p.Slug+".localhost")
 			expected := "Actual Next.js SSR"
 			if adapter == "nuxt" {

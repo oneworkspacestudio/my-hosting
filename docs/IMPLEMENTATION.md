@@ -87,3 +87,15 @@ acceptance still require evidence. Do not publish a stable/complete claim.
 8. Publish app then paired suite only after critical gates pass. No Actions.
 
 Do not turn incomplete acceptance into a stable release or claim a fork.
+
+## Acceptance correction and preview scope, late 18 October
+
+The earlier pending framework, cancellation, retention, canonical domain and
+fresh MyAccounts/install/logout checks now pass; see ACCEPTANCE.md. The final
+full native suite passed in192.843 seconds, including real Next/Nuxt builds and
+WebSocket/crash recovery. Fresh Workspace OIDC reused the provider session and
+global logout revoked the path-scoped Hosting session (database count zero).
+No production/service/reboot/other-machine claim is made. The release channel is
+preview for trusted administrators. Native SCM support remains unsupported;
+interactive user-logon startup is the supported suite path. Packaging and paired
+organization release pins must still be verified before publication is recorded.

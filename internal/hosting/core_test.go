@@ -19,7 +19,14 @@ import (
 
 func testApp(t *testing.T) *App {
 	t.Helper()
-	parent := "C:/Projects/.cache/myhosting-acceptance-20261018"
+	parent := os.Getenv("MYHOSTING_TEST_ROOT")
+	if parent == "" {
+		parent = filepath.Join(os.Getenv("LOCALAPPDATA"), "OneWorkspace", "MyHostingTests")
+	}
+	parent, e := filepath.Abs(parent)
+	if e != nil {
+		t.Fatal(e)
+	}
 	if e := os.MkdirAll(parent, 0700); e != nil {
 		t.Fatal(e)
 	}
@@ -37,6 +44,7 @@ func testApp(t *testing.T) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &App{cfg: Config{Data: root, Listen: "127.0.0.1:19007", Origin: "http://127.0.0.1:19007"}, store: s, web: fstest.MapFS{"index.html": {Data: []byte("<title>Hosting fixture</title>")}}, ctx: ctx, cancel: cancel, flows: map[string]loginFlow{}, attempts: map[string]attempt{}, active: map[string]context.CancelFunc{}, wake: make(chan struct{}, 1), processes: map[string]*managedProcess{}}
 	a.runtime = &runtimeManager{root: filepath.Join(root, "runtimes"), status: map[string]string{}}
+	a.started = time.Now()
 	t.Cleanup(func() {
 		a.Close()
 		if filepath.Dir(root) != filepath.FromSlash(parent) {

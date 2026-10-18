@@ -63,6 +63,10 @@ Page Project
       Select name=deployFilter options=$deployFilters
       If condition=$canDeploy
         Button variant=secondary action=upload "Upload ZIP"
+    If condition=$canDeploy
+      Field label="ZIP upload environment"
+        Select name=uploadEnvironment options=$environmentOptions
+      Text variant=caption "Preview uploads get their own HTTPS address and leave production serving its current release."
     For each=$deployments
       Card href=$item.href variant=deployment
         Row
@@ -177,6 +181,10 @@ Page Project
         If condition=$canAdmin
           Row
             Button action=verifyDomain "Check DNS & HTTPS"
+            If condition=$canUseCanonical
+              Button variant=secondary action=makeCanonical "Make canonical address"
+            If condition=$selectedDomain.canonical
+              Button variant=secondary action=clearCanonical "Use managed site address"
             Button variant=danger action=removeDomain "Remove binding"
   If condition=$tabProcess
     Card

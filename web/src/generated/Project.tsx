@@ -97,6 +97,12 @@ export function Project({ data, onAction }: { data: any; onAction: (name: string
               <Button variant="secondary" onClick={() => onAction("upload")}>Upload ZIP</Button>
             )}
           </Row>
+          {data.canDeploy && (
+            <>
+              <Field label="ZIP upload environment"><Select name="uploadEnvironment" options={data.environmentOptions} /></Field>
+              <Text variant="caption">Preview uploads get their own HTTPS address and leave production serving its current release.</Text>
+            </>
+          )}
           {data.deployments.map((item, i) => (
             <Card key={i} href={item.href} variant="deployment">
               <Row>
@@ -224,6 +230,12 @@ export function Project({ data, onAction }: { data: any; onAction: (name: string
                 {data.canAdmin && (
                   <Row>
                     <Button onClick={() => onAction("verifyDomain")}>Check DNS & HTTPS</Button>
+                    {data.canUseCanonical && (
+                      <Button variant="secondary" onClick={() => onAction("makeCanonical")}>Make canonical address</Button>
+                    )}
+                    {data.selectedDomain.canonical && (
+                      <Button variant="secondary" onClick={() => onAction("clearCanonical")}>Use managed site address</Button>
+                    )}
                     <Button variant="danger" onClick={() => onAction("removeDomain")}>Remove binding</Button>
                   </Row>
                 )}

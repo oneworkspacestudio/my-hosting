@@ -303,6 +303,10 @@ func (a *App) api(w http.ResponseWriter, r *http.Request, s Session, path string
 		a.backupAPI(w, r, s)
 		return
 	}
+	if path == "storage/cleanup" {
+		a.cleanupAPI(w, r, s)
+		return
+	}
 	parts := strings.Split(path, "/")
 	if len(parts) < 2 || parts[0] != "projects" || !validID.MatchString(parts[1]) {
 		http.NotFound(w, r)
@@ -338,6 +342,14 @@ func (a *App) api(w http.ResponseWriter, r *http.Request, s Session, path string
 				fail(w, 400, e)
 				return
 			}
+			a.publishMu.Lock()
+			defer a.publishMu.Unlock()
+			current, readErr := a.store.project(pid)
+			if readErr != nil {
+				fail(w, 500, dbError(readErr))
+				return
+			}
+			next.Live = current.Live
 			if e = a.store.saveProject(next); e != nil {
 				fail(w, 500, dbError(e))
 				return
@@ -423,6 +435,8 @@ func (a *App) settingsAPI(w http.ResponseWriter, r *http.Request, s Session) {
 		fail(w, 400, errors.New("Choose a free site port (1024–65535), retain 2–100 releases and concurrency 1; use a valid sites parent domain and direct or tunnel HTTPS"))
 		return
 	}
+	a.publishMu.Lock()
+	defer a.publishMu.Unlock()
 	if a.runtime.ready("caddy") != nil {
 		if next.Public {
 			fail(w, 409, errors.New("Provision Caddy before enabling public HTTPS"))
@@ -441,9 +455,7 @@ func (a *App) settingsAPI(w http.ResponseWriter, r *http.Request, s Session) {
 		fail(w, 500, dbError(e))
 		return
 	}
-	a.publishMu.Lock()
 	e := a.reloadRoutes(r.Context(), nil)
-	a.publishMu.Unlock()
 	if e != nil {
 		_ = a.store.setSetting("hosting", old)
 		fail(w, 409, e)
@@ -477,6 +489,7 @@ func (a *App) runtimeAPI(w http.ResponseWriter, r *http.Request, s Session, key 
 		return
 	}
 	var offline string
+	repair := r.URL.Query().Get("repair") == "1"
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/zip") {
 		offline = filepath.Join(a.cfg.Data, "cache", "runtime-upload-"+id()+".zip")
 		r.Body = http.MaxBytesReader(w, r.Body, 128<<20)
@@ -494,10 +507,30 @@ func (a *App) runtimeAPI(w http.ResponseWriter, r *http.Request, s Session, key 
 		}
 	}
 	go func() {
+		a.jobsGate.Lock()
+		defer a.jobsGate.Unlock()
 		if offline != "" {
 			defer os.Remove(offline)
 		}
-		e := a.runtime.provision(a.ctx, key, offline, nil)
+		if a.ctx.Err() != nil {
+			return
+		}
+		if repair {
+			if key == "caddy" {
+				_ = a.stopCaddy()
+			} else {
+				a.processMu.Lock()
+				ids := []string{}
+				for id := range a.processes {
+					ids = append(ids, id)
+				}
+				a.processMu.Unlock()
+				for _, id := range ids {
+					a.stopNode(id)
+				}
+			}
+		}
+		e := a.runtime.provision(a.ctx, key, offline, nil, repair)
 		state := "ready"
 		if e != nil {
 			state = "needs attention: " + e.Error()
@@ -505,13 +538,18 @@ func (a *App) runtimeAPI(w http.ResponseWriter, r *http.Request, s Session, key 
 		a.runtime.mu.Lock()
 		a.runtime.status[key] = state
 		a.runtime.mu.Unlock()
-		if e == nil && key == "caddy" {
+		if (e == nil && key == "caddy") || repair {
 			a.publishMu.Lock()
-			_ = a.reloadRoutes(a.ctx, nil)
+			restoreErr := a.reloadRoutes(a.ctx, nil)
 			a.publishMu.Unlock()
+			if restoreErr != nil {
+				a.runtime.mu.Lock()
+				a.runtime.status[key] = "Runtime setup finished; app restart needs attention: " + restoreErr.Error()
+				a.runtime.mu.Unlock()
+			}
 		}
 	}()
-	_ = a.store.audit(s.User.ID, "", "runtime.provision", map[string]string{"runtime": key})
+	_ = a.store.audit(s.User.ID, "", "runtime.provision", map[string]any{"runtime": key, "repair": repair})
 	jsonOut(w, 202, map[string]string{"state": "provisioning", "message": "Download/extraction is running. Settings shows the current status."})
 }
 func Run(ctx context.Context, cfg Config, web fs.FS, browser bool) error {

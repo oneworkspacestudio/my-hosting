@@ -15,7 +15,8 @@ Page Shell
       Badge tone=success "Self hosted"
       Text variant=caption "Your projects. Your server."
       Text variant=caption "Trusted source only"
-    Link href=$workspaceURL variant=nav "← One Workspace"
+    If condition=$workspaceLinked
+      Link href=$workspaceURL variant=nav "← One Workspace"
   Stack variant=workspace
     Row variant=topbar
       Input name=search placeholder="Search projects or jump to a site…" type=search
