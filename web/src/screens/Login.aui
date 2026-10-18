@@ -1,0 +1,20 @@
+Page Login
+  Card variant=login
+    Image src=$logo width=76 height=76 alt="My Hosting"
+    Text variant=eyebrow "ONE WORKSPACE"
+    Heading level=1 "A home for your ideas."
+    Text variant=muted "Deploy your sites and apps on your own server."
+    If condition=$error
+      Alert tone=error $error
+    If condition=$oidc
+      Button action=oidcLogin "Continue with MyAccounts"
+      Text variant=caption "Already signed in to Workspace? Your existing MyAccounts session connects automatically."
+    Else
+      If condition=$bootstrapNeeded
+        Alert tone=info "Create the standalone owner locally before signing in: run MyHosting.exe --data YOUR_NTFS_FOLDER --email YOUR_EMAIL --password-stdin bootstrap. MyAccounts mode disables independent login."
+      Field label="Email address"
+        Input name=loginEmail type=email autoComplete=username
+      Field label="Password"
+        Input name=loginPassword type=password autoComplete=current-password
+      Button action=localLogin "Sign in"
+    Text variant=caption "Self hosted · Native Windows · No Docker"

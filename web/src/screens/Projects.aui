@@ -1,0 +1,57 @@
+Page Projects
+  Row variant=page-header
+    Stack gap=sm
+      Text variant=eyebrow "BUILD SOMETHING GREAT"
+      Heading level=1 "Your projects"
+      Text variant=muted "From source to a live site. Everything stays on your server."
+    If condition=$canAdmin
+      Button action=createProject
+        Icon name=Plus
+        Text "Add new project"
+  Grid columns=3 variant=metrics
+    Card
+      Text variant=caption "PROJECTS"
+      Metric value=$projectCount
+      Text variant=muted "Sites you can access"
+    Card
+      Text variant=caption "IN PRODUCTION"
+      Metric value=$liveCount
+      Text variant=muted "Published releases"
+    Card
+      Text variant=caption "DEPLOYMENT MODEL"
+      Heading level=2 "Native Windows"
+      Text variant=muted "Caddy routing · optional Node runtimes"
+  Row variant=section-header
+    Heading level=2 "All projects"
+    Badge tone=muted $projectCount
+  If condition=$emptyProjects
+    Card variant=empty
+      Icon name=Layers
+      Heading level=2 "A home for your next idea"
+      Text "Connect a GitHub repository or upload a static site ZIP to publish your first project."
+      If condition=$canAdmin
+        Button action=createProject "Create a project"
+      Else
+        Text "Ask your Hosting administrator to grant you project access."
+  Grid columns=3 variant=projects
+    For each=$projects
+      Card href=$item.href variant=project
+        Row
+          Icon name=$item.icon
+          Spacer
+          Badge tone=$item.tone $item.status
+        Heading level=2 $item.name
+        Text variant=muted $item.description
+        Divider
+        Row
+          Icon name=GitBranch
+          Text variant=caption $item.branch
+          Spacer
+          Text variant=caption $item.adapter
+        Text variant=caption $item.repository
+  Card variant=tip
+    Row
+      Icon name=ShieldCheck
+      Stack gap=xs
+        Heading level=3 "Built for your own trusted projects"
+        Text "Build scripts run code. Only deploy sources approved by your administrator. The management dashboard and hosted sites use separate origins."

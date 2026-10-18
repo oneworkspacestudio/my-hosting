@@ -1,0 +1,59 @@
+Page Deploy
+  Link href=$deploymentsHref variant=breadcrumb "← Deployment history"
+  Row variant=page-header
+    Stack gap=sm
+      Text variant=eyebrow $deploy.environment
+      Heading level=1 $deployTitle
+      Text variant=muted $deploySummary
+    Badge tone=$deployTone $deploy.state
+  Grid columns=4 variant=metrics
+    Card
+      Text variant=caption "SOURCE"
+      Text variant=code $shortCommit
+      Text variant=caption $deploy.branch
+    Card
+      Text variant=caption "DURATION"
+      Heading level=2 $duration
+      Text variant=caption $deploy.created
+    Card
+      Text variant=caption "OUTPUT"
+      Heading level=2 $outputSize
+      Text variant=caption $deploy.config.adapter
+    Card
+      Text variant=caption "ENVIRONMENT"
+      Heading level=2 $deploy.environment
+      Text variant=caption $nodeVersion
+  If condition=$deploy.error
+    Alert tone=error $deploy.error
+  If condition=$deploy.url
+    Card variant=tip
+      Row
+        Icon name=Globe
+        Link href=$deploy.url external=true $deploy.url
+  Row variant=actions
+    If condition=$canCancel
+      Button variant=danger action=cancelDeploy "Cancel deployment"
+    If condition=$canRetry
+      Button action=retryDeploy "Retry same source & configuration"
+    If condition=$canRebuild
+      Button variant=secondary action=rebuildDeploy "Rebuild with current settings"
+    If condition=$canRepublish
+      Button variant=secondary action=republishDeploy "Republish this artifact"
+    If condition=$canRollback
+      Button variant=secondary action=rollbackDeploy "Restore this production release"
+    If condition=$canPromote
+      Button action=promoteDeploy "Promote preview to production"
+    Link href=$downloadLogsURL external=true variant=button-secondary "Download logs"
+  Card variant=terminal
+    Row
+      Heading level=3 "Deployment log"
+      Spacer
+      Badge tone=$streamTone $streamStatus
+    Text variant=pre $buildLogs
+  Card
+    Heading level=2 "Exact build configuration"
+    Text variant=muted "This deployment keeps its own immutable source revision and configuration snapshot. Environment values are encrypted and never displayed."
+    Text variant=pre $configJSON
+    Text variant=caption $sourceProof
+    Text variant=caption $artifactProof
+    Text variant=caption "Test evidence: deployment health probes and configuration validation are recorded in the log; arbitrary project test suites run only if included in the project's build command."

@@ -1,0 +1,57 @@
+Page Settings
+  Row variant=page-header
+    Stack gap=sm
+      Text variant=eyebrow "YOUR INFRASTRUCTURE"
+      Heading level=1 "Settings & health"
+      Text variant=muted "Manage native runtimes, routing, storage and recovery."
+    Badge tone=muted $version
+  Alert tone=info $settings.securityScope
+  Grid columns=3
+    For each=$runtimes
+      Card
+        Row
+          Heading level=2 $item.name
+          Spacer
+          Badge tone=$item.tone $item.state
+        Text $item.version
+        Text variant=caption $item.description
+  Card
+    Heading level=2 "Verified runtime provisioning"
+    Text variant=muted "Downloads use pinned official releases and SHA-256 checks. Static sites do not install Node. Offline import accepts only the exact pinned Windows AMD64 ZIP."
+    Field label="Runtime"
+      Select name=runtime options=$runtimeOptions
+    Row
+      Button action=provisionRuntime "Download & verify runtime"
+      Button variant=secondary action=importRuntime "Import verified offline ZIP"
+    Text variant=caption $runtimeStatus
+  Card variant=form
+    Heading level=2 "Routing & retention"
+    Field label="Local site port"
+      Input name=caddyPort type=number min=1024 max=65535
+    Field label="Optional preview parent domain"
+      Input name=previewDomain placeholder="sites.example.com"
+    Text variant=caption "Needs matching wildcard DNS to this server and reachable HTTPS. Leave empty for .localhost previews."
+    Checkbox name=public label="Enable public Caddy HTTPS listeners (TCP 80/443)"
+    Field label="Retained release target"
+      Input name=retain type=number min=2 max=100
+    Text variant=caption "Published artifacts needed by live routes and rollback references are preserved. Cleanup is explicit; backups are never treated as build cache."
+    Field label="Concurrent builds"
+      Select name=concurrency options=$concurrencyOptions
+    Button action=saveSettings "Save routing settings"
+  Card
+    Heading level=2 "Protected storage"
+    Text variant=code $settings.dataPath
+    Text variant=muted "SQLite metadata, projects, release artifacts, logs, encrypted secrets, Caddy state and backups are stored in named folders. Windows persistent ACLs are required."
+    Text variant=caption $caddySummary
+  Card variant=form
+    Heading level=2 "Encrypted backup & recovery"
+    Text variant=muted "Export a consistent, password-encrypted backup. Node processes pause during export and resume afterward. Secrets are portable inside the encrypted archive; browser sessions are excluded."
+    Field label="Backup encryption password"
+      Input name=backupPassword type=password autoComplete=new-password
+    Button action=exportBackup "Export encrypted backup"
+    Text variant=caption "Keep the password separately. Restore offline using MyHosting.exe --backup BACKUP_FILE --restore-to NEW_NTFS_FOLDER --password-stdin restore. Existing installations are never overwritten. Re-provision runtimes and configure this host's OIDC callback/domain after moving machines."
+  Card
+    Heading level=2 "Updates & background operation"
+    Text "Workspace installs compatible releases from the One Workspace Studio organization. Standalone users replace the stopped application with a verified release and retain the private-data folder."
+    Link href=$releasesURL external=true "View verified release downloads ↗"
+    Text variant=caption "For Windows services, use a dedicated non-system account with access only to the Hosting folder. Executable builds fail closed under LocalSystem. See the Windows service guide."

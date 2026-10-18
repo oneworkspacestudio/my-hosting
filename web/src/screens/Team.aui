@@ -1,0 +1,25 @@
+Page Team
+  Row variant=page-header
+    Stack gap=sm
+      Text variant=eyebrow "PEOPLE & PERMISSIONS"
+      Heading level=1 "Your Hosting team"
+      Text variant=muted "Identity belongs to MyAccounts. Hosting permissions stay explicit."
+  Alert tone=info $teamGuidance
+  For each=$team
+    Card href=$item.href variant=member
+      Row
+        Icon name=UserRound
+        Stack gap=xs
+          Heading level=3 $item.name
+          Text variant=caption $item.email
+          Text variant=caption $item.identity
+        Spacer
+        Badge tone=$item.tone $item.role
+  If condition=$selectedUser
+    Card variant=form
+      Heading level=2 $selectedUser.name
+      Text variant=muted "Global administrators can configure and deploy every project. Viewers require explicit project membership. Only the configured Workspace owner changes global roles."
+      Field label="Global role"
+        Select name=globalRole options=$globalRoleOptions
+      If condition=$isOwner
+        Button action=saveGlobalRole "Save global role"

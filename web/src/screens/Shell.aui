@@ -1,0 +1,41 @@
+Page Shell
+  Stack variant=sidebar
+    Row variant=brand
+      Image src=$logo alt="My Hosting" width=38 height=38
+      Stack gap=xs
+        Heading level=2 "My Hosting"
+        Text variant=caption "ONE WORKSPACE"
+    Text variant=eyebrow "WORKSPACE"
+    For each=$nav
+      Link href=$item.href variant=$item.variant
+        Icon name=$item.icon
+        Text $item.title
+    Spacer
+    Card variant=scope
+      Badge tone=success "Self hosted"
+      Text variant=caption "Your projects. Your server."
+      Text variant=caption "Trusted source only"
+    Link href=$workspaceURL variant=nav "← One Workspace"
+  Stack variant=workspace
+    Row variant=topbar
+      Input name=search placeholder="Search projects or jump to a site…" type=search
+      Button variant=icon action=notifications aria-label="Deployment notifications"
+        Icon name=Bell
+      Button variant=icon action=theme aria-label="Toggle color theme"
+        Icon name=SunMoon
+      Badge tone=muted "Windows · self hosted"
+      Row variant=profile
+        Text $initials
+        Stack gap=xs
+          Text $user.name
+          Text variant=caption $user.role
+    Stack variant=content
+      If condition=$error
+        Alert tone=error $error
+      If condition=$notice
+        Alert tone=success $notice
+      If condition=$busy
+        Row
+          Spinner
+          Text $busy
+      Section id=screen-outlet

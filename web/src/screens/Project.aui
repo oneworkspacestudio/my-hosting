@@ -1,0 +1,239 @@
+Page Project
+  Link href="#projects" variant=breadcrumb "← All projects"
+  Row variant=page-header
+    Stack gap=sm
+      Text variant=eyebrow $project.adapter
+      Heading level=1 $project.name
+      Row
+        Icon name=GitBranch
+        Text variant=muted $project.repository
+        Badge tone=muted $project.branch
+    If condition=$canDeploy
+      Button action=triggerDialog
+        Icon name=Rocket
+        Text "Trigger deploy"
+  Row variant=tabs
+    For each=$projectTabs
+      Link href=$item.href variant=$item.variant $item.title
+  If condition=$tabOverview
+    Grid columns=2
+      Card variant=production
+        Row
+          Badge tone=$productionTone $productionStatus
+          Spacer
+          Icon name=Globe
+        Heading level=2 "Production deployment"
+        Text variant=muted $productionMessage
+        If condition=$productionURL
+          Link href=$productionURL external=true variant=button "Open site ↗"
+        Text variant=caption $productionCommit
+      Card
+        Heading level=2 "Project activity"
+        Text $metricsLabel
+        Grid columns=2
+          Stack
+            Metric value=$metrics.requests
+            Text variant=caption "Recorded requests"
+          Stack
+            Metric value=$metrics.serverErrors
+            Text variant=caption "Server errors"
+        Text variant=caption $metrics.scope
+    Row variant=section-header
+      Heading level=2 "Recent deployments"
+      Link href=$deploymentsHref "View all →"
+    For each=$recentDeploys
+      Card href=$item.href variant=deployment
+        Row
+          Badge tone=$item.tone $item.state
+          Stack gap=xs
+            Text $item.title
+            Text variant=caption $item.summary
+          Spacer
+          Text variant=caption $item.when
+    If condition=$noDeploys
+      Card variant=empty
+        Icon name=Rocket
+        Heading level=2 "Your first deploy starts here"
+        Text "Trigger a GitHub build or upload a ZIP containing your static output."
+        If condition=$canDeploy
+          Button action=upload "Upload a ZIP"
+  If condition=$tabDeployments
+    Row variant=section-header
+      Heading level=2 "Deployment history"
+      Select name=deployFilter options=$deployFilters
+      If condition=$canDeploy
+        Button variant=secondary action=upload "Upload ZIP"
+    For each=$deployments
+      Card href=$item.href variant=deployment
+        Row
+          Badge tone=$item.tone $item.state
+          Stack gap=xs
+            Text $item.title
+            Text variant=caption $item.summary
+          Spacer
+          Text variant=caption $item.when
+    If condition=$noFilteredDeploys
+      Card variant=empty
+        Text "No deployments match this view."
+    Row
+      Button variant=secondary action=previousPage disabled=$firstPage "← Previous"
+      Text variant=caption $pageLabel
+      Button variant=secondary action=nextPage disabled=$lastPage "Next →"
+  If condition=$tabBuild
+    Card variant=form
+      Heading level=2 "Build and runtime settings"
+      Text variant=muted "Changes apply to new builds. Retry uses the original deployment's source and saved configuration; rebuild uses these current settings."
+      Field label="GitHub repository"
+        Input name=repository
+      Field label="Production branch"
+        Input name=branch
+      Field label="Adapter"
+        Select name=adapter options=$adapterOptions
+      Field label="Node major"
+        Select name=nodeMajor options=$nodeOptions
+      Field label="Install command · JSON arguments"
+        Input name=install
+      Field label="Build command · JSON arguments"
+        Input name=build
+      Field label="Start command · JSON arguments"
+        Input name=start
+      Field label="Static output directory"
+        Input name=output
+      Field label="Health path"
+        Input name=healthPath
+      Grid columns=3
+        Field label="Timeout · seconds"
+          Input name=timeout type=number min=10 max=1800
+        Field label="RAM · MiB"
+          Input name=memoryMB type=number min=128 max=4096
+        Field label="Disk · MiB"
+          Input name=diskMB type=number min=10 max=10240
+      Checkbox name=previews label="Allow preview branches"
+      Checkbox name=trusted label="I approve this source and its executable scripts"
+      If condition=$canAdmin
+        Button action=saveBuild "Save build settings"
+    Card variant=form
+      Heading level=2 "GitHub connection & automatic deploys"
+      Text $github.message
+      Text variant=caption $github.webhookURL
+      Field label="Fine-grained GitHub token · Contents: read (optional for public repos)"
+        Input name=githubToken type=password autoComplete=off
+      If condition=$canAdmin
+        Button action=connectGitHub "Verify repository & configure webhook"
+      If condition=$webhookSecret
+        Alert tone=info "Copy this webhook secret into GitHub now. It is shown only once."
+        Text variant=code $webhookSecret
+      Text variant=caption "In GitHub repository Settings → Webhooks, add the URL above, JSON content type and this secret, selecting Push events. The URL must be reachable from GitHub."
+    Card variant=form
+      Heading level=2 "Environment variables & secrets"
+      Text variant=muted "Values are encrypted on this Windows host and write-only after saving. Each deployment snapshots its environment; logs mask secret values."
+      For each=$secrets
+        Row
+          Badge tone=muted $item.environment
+          Text variant=code $item.name
+          Spacer
+          Text "••••••••"
+      Field label="Name"
+        Input name=secretName placeholder="API_TOKEN"
+      Field label="Environment"
+        Select name=secretEnvironment options=$environmentOptions
+      Field label="New value"
+        Input name=secretValue type=password autoComplete=off
+      If condition=$canAdmin
+        Row
+          Button action=saveSecret "Save protected value"
+          Button variant=secondary action=deleteSecret "Remove named value"
+  If condition=$tabDomains
+    Card variant=tip
+      Heading level=2 "A separate origin for every site"
+      Text $domainGuidance
+      Link href=$localURL external=true "Open local production URL ↗"
+    For each=$domains
+      Card href=$item.href variant=domain
+        Row
+          Icon name=Globe
+          Heading level=3 $item.host
+          Spacer
+          Badge tone=$item.tone $item.status
+        Text variant=caption $item.error
+    Card variant=form
+      Heading level=2 "Add a custom domain"
+      Field label="Hostname"
+        Input name=domain placeholder="app.example.com"
+      If condition=$canAdmin
+        Button action=addDomain "Add domain"
+      If condition=$selectedDomain
+        Divider
+        Heading level=3 $selectedDomain.host
+        Text "Create a TXT record at:"
+        Text variant=code $dnsRecord
+        Text "With value:"
+        Text variant=code $selectedDomain.token
+        Alert tone=info $selectedDomain.error
+        If condition=$canAdmin
+          Row
+            Button action=verifyDomain "Check DNS & HTTPS"
+            Button variant=danger action=removeDomain "Remove binding"
+  If condition=$tabProcess
+    Card
+      Row
+        Heading level=2 "Managed Node process"
+        Badge tone=muted $process.state
+      Text $process.error
+      Text variant=caption $processSummary
+      Text variant=caption $process.limits
+      If condition=$canDeploy
+        Row
+          Button action=processStart "Start"
+          Button variant=secondary action=processRestart "Restart"
+          Button variant=danger action=processStop "Stop"
+    Card variant=terminal
+      Row
+        Heading level=3 "Process logs"
+        Spacer
+        Button variant=secondary action=refreshProcessLogs "Refresh logs"
+      Text variant=pre $processLogs
+    Alert tone=info "This is persistent Node hosting, not a managed serverless-functions service. Static sites do not have a Node process."
+  If condition=$tabAccess
+    Card
+      Heading level=2 "Project access"
+      Text variant=muted "Owners and global administrators can manage all projects. Other members see only projects explicitly shared with them."
+      For each=$members
+        Row variant=member
+          Stack
+            Text $item.name
+            Text variant=caption $item.email
+          Spacer
+          Badge tone=muted $item.role
+    If condition=$canAdmin
+      Card variant=form
+        Heading level=3 "Grant project access"
+        Field label="Signed-in MyAccounts member"
+          Select name=memberId options=$memberOptions
+        Field label="Project role"
+          Select name=memberRole options=$projectRoleOptions
+        Row
+          Button action=saveMember "Save access"
+          Button variant=secondary action=removeMember "Remove access"
+  If condition=$tabAudit
+    Heading level=2 "Project audit trail"
+    Text variant=muted "Append-only API events with a SHA-256 chain. Administrators with direct filesystem/database access remain trusted."
+    For each=$audit
+      Card variant=event
+        Row
+          Badge tone=muted $item.action
+          Text variant=caption $item.at
+        Text variant=code $item.summary
+  If condition=$showTrigger
+    Card variant=dialog
+      Heading level=2 "Deploy from GitHub"
+      Field label="Branch"
+        Input name=deployBranch
+      Field label="Commit SHA · optional; empty resolves branch HEAD"
+        Input name=deployCommit placeholder="40-character commit SHA"
+      Field label="Environment"
+        Select name=deployEnvironment options=$environmentOptions
+      Checkbox name=clearCache label="Clear npm build cache before deploying"
+      Row
+        Button action=triggerDeploy "Trigger deploy"
+        Button variant=secondary action=closeTrigger "Cancel"

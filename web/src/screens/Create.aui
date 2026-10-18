@@ -1,0 +1,56 @@
+Page Create
+  Row variant=page-header
+    Stack gap=sm
+      Text variant=eyebrow "NEW PROJECT"
+      Heading level=1 "Give your next idea a home"
+      Text variant=muted "Start with a repository or upload your files after creating the project."
+    Button variant=secondary action=home "Cancel"
+  Row variant=steps
+    Badge tone=$sourceTone "1 · Source"
+    Divider
+    Badge tone=$buildTone "2 · Build"
+    Divider
+    Badge tone=$reviewTone "3 · Review"
+  Card variant=form
+    If condition=$createSource
+      Heading level=2 "Project and source"
+      Field label="Project name"
+        Input name=name placeholder="My lovely website" required=true
+      Field label="Site name"
+        Input name=slug placeholder="my-lovely-website" required=true
+      Text variant=caption "Lowercase letters, numbers and hyphens. This forms your permanent local site address."
+      Field label="GitHub repository (optional)"
+        Input name=repository placeholder="owner/repository"
+      Field label="Production branch"
+        Input name=branch placeholder="main"
+      Text variant=muted "Private repositories can be connected with a protected, fine-grained GitHub credential after creation. For ZIP uploads, leave the repository empty."
+      Button action=createNext "Continue to build settings →"
+    If condition=$createBuild
+      Heading level=2 "How should this project run?"
+      Field label="Deployment adapter"
+        Select name=adapter options=$adapterOptions
+      Field label="Node runtime (only installed when needed)"
+        Select name=nodeMajor options=$nodeOptions
+      Field label="Install command · JSON argument array"
+        Input name=install placeholder="JSON arguments, for example npm ci"
+      Field label="Build command · JSON argument array"
+        Input name=build placeholder="JSON arguments for your build script"
+      Field label="Static output directory"
+        Input name=output placeholder="dist or . for an uploaded site root"
+      Field label="Start command · generic Node adapter"
+        Input name=start placeholder="JSON arguments for the Node server"
+      Text variant=caption "Next.js uses standalone output; Nuxt uses Nitro node-server output. Empty install/build commands suit already-built static ZIPs."
+      Row
+        Button variant=secondary action=createBack "Back"
+        Button action=createNext "Review project →"
+    If condition=$createReview
+      Heading level=2 "Ready for its first deployment"
+      Text $createSummary
+      Field label="Preview deployments"
+        Checkbox name=previews label="Allow preview branches and releases"
+      Field label="Source approval"
+        Checkbox name=trusted label="I administer and trust this project's source and build scripts."
+      Alert tone=info "Static files need Caddy. Executable builds and Node apps also need a verified Node runtime. Dependencies download on demand; Settings supports verified offline archives."
+      Row
+        Button variant=secondary action=createBack "Back"
+        Button action=saveNewProject "Create project"

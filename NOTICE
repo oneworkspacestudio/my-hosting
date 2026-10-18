@@ -1,0 +1,15 @@
+My Hosting — One Workspace Studio
+Copyright 2026 One Workspace Studio contributors.
+Licensed under the Apache License, Version 2.0.
+
+Original application, not a claimed GitHub fork of another hosting platform.
+Windows ACL, DPAPI and process-job primitives follow and adapt the existing
+Apache-2.0 One Workspace platform contract:
+https://github.com/oneworkspacestudio/one-workspace
+
+Caddy (Apache-2.0) and Node.js/npm are separately managed upstream runtimes.
+Their upstream licence files must be retained in every runtime installation.
+React, Vite and @codedia/parser: MIT. Lucide: ISC. modernc.org/sqlite: BSD-3-Clause
+with bundled SQLite/public-domain and transitive notices. Go OIDC, OAuth, crypto
+and Windows libraries retain their upstream licences. Final binary releases
+must include the complete dependency inventory and notices.
