@@ -7,11 +7,11 @@ No GitHub Actions were run.
 
 | Check | Evidence/result |
 |---|---|
-| Full native Go suite | Passed192.843s, pinned official Caddy2.11.7/Node24.22.0, actual Windows processes. |
+| Full native Go suite | Final passed205.683s (earlier run192.843s), pinned official Caddy2.11.7/Node24.22.0, actual Windows processes. |
 | Real GitHub Express | Public org archive pinned to a483058, npm installed68 packages under the restricted worker; actual Express5.1.0 served via managed Node/Caddy/free tunnel. |
 | Restart permission reset | Protected existing runtime files, restored Node traffic, and ran npm successfully after regranting read/execute to protected descendants. |
-| Next standalone | Next16.4.2 + React19.3.1 built84.28s and served server-rendered output through Caddy. |
-| Nuxt Nitro | Nuxt4.6.2 + Nitro2.13.4 built40.90s using documented in-process Oxc and served through Caddy. |
+| Next standalone | Next16.4.2 + React19.3.1 final build82.10s and served server-rendered output through Caddy. |
+| Nuxt Nitro | Nuxt4.6.2 + Nitro2.13.4 final build47.36s using documented in-process Oxc and served through Caddy. |
 | Static publication | ZIP upload, production switch, preview route, promotion/rollback, exact deployment-header probes passed. |
 | Node isolation | Private host/cross-project reads and immutable output writes denied; own persistent directory write allowed. |
 | Descendant cancellation | Real restricted parent + Node child stopped; completed cancellation waits for process exit; prior live traffic unchanged. |

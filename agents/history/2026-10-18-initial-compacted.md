@@ -292,3 +292,11 @@ module missing dir, Go VCS stamping and npm empty-key lock) fixed. First ZIP was
 only a packaging check and predates latest runtime fix; do not publish stale bytes.
 Full release regression including SSR is running externally. Suite build-org and
 catalog guard now require Hosting but lock still needs actual published digest.
+
+
+Final full regression including both real SSR frameworks passed205.683s after
+archive/restart fixes (Next82.10s, Nuxt47.36s, WebSocket/crash13.66s). Source
+440bdee is pushed. Earlier packaging checks are not release bytes. Final source
+commit adds this evidence only; local ZIP/build-info must point at that commit.
+Still no published release at this recording; next is app draft/upload/verify/
+publish, exact asset digest pin in suite and paired verified installer release.
