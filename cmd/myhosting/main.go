@@ -50,6 +50,9 @@ func run() error {
 	cfg := hosting.Config{Data: abs, Listen: *listen, Origin: strings.TrimRight(*origin, "/"), Issuer: *issuer, ClientID: *client, ClientSecret: os.Getenv("WORKSPACE_OIDC_CLIENT_SECRET"), Owner: os.Getenv("WORKSPACE_OWNER_SUBJECT")}
 	cfg.SiteDomain, cfg.SiteTransport = *sites, *transport
 	cfg.SiteStyle = os.Getenv("WORKSPACE_SITES_STYLE")
+	cfg.GitBase = os.Getenv("WORKSPACE_GIT_URL")
+	cfg.GitBridgeURL = os.Getenv("MYHOSTING_GIT_BRIDGE_URL")
+	cfg.GitBridgeToken = os.Getenv("MYHOSTING_GIT_BRIDGE_TOKEN")
 	cfg.SiteCFAccount, cfg.SiteCFZone, cfg.SiteCFTunnel, cfg.SiteCFToken = os.Getenv("WORKSPACE_SITES_CF_ACCOUNT"), os.Getenv("WORKSPACE_SITES_CF_ZONE"), os.Getenv("WORKSPACE_SITES_CF_TUNNEL"), os.Getenv("WORKSPACE_SITES_CF_TOKEN")
 	password := func() (string, error) {
 		if !*passwordStdin {

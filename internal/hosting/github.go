@@ -57,6 +57,18 @@ func (a *App) secretValues(pid, environment string) (map[string]string, error) {
 	return out, rows.Err()
 }
 func (a *App) githubCall(ctx context.Context, p Project, endpoint string, out any) error {
+	if repositoryProvider(p) != "github" {
+		response, e := a.repositoryResponse(ctx, p, endpoint)
+		if e != nil {
+			return e
+		}
+		defer response.Body.Close()
+		if response.StatusCode != 200 {
+			return &repositoryHTTPError{response.StatusCode, fmt.Sprintf("Git returned HTTP %d; check repository and read access", response.StatusCode)}
+		}
+		return json.NewDecoder(io.LimitReader(response.Body, 8<<20)).Decode(out)
+	}
+
 	token, _ := a.getSecret(p.ID, "GITHUB_TOKEN", "integration")
 	req, e := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/repos/"+p.Repository+endpoint, nil)
 	if e != nil {
@@ -75,13 +87,16 @@ func (a *App) githubCall(ctx context.Context, p Project, endpoint string, out an
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("GitHub returned HTTP %d; check the repository, branch and fine-grained Contents:read permission", resp.StatusCode)
+		return &repositoryHTTPError{resp.StatusCode, fmt.Sprintf("GitHub returned HTTP %d; check the repository, branch and fine-grained Contents:read permission", resp.StatusCode)}
 	}
 	return json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(out)
 }
 func (a *App) resolveSource(ctx context.Context, p Project, branch, sha string) (string, string, string, error) {
 	if p.Repository == "" {
-		return "", "", "", errors.New("Connect a GitHub repository or upload a ZIP")
+		return "", "", "", errors.New("Connect a repository or upload a ZIP")
+	}
+	if repositoryProvider(p) != "github" {
+		return a.gitSource(ctx, p, branch, sha)
 	}
 	if branch == "" {
 		branch = p.Branch
@@ -190,10 +205,14 @@ func (a *App) fetchSource(ctx context.Context, d *Deploy, report func(string)) e
 	}
 	d.Author = author
 	d.Message = message
-	report("Downloading immutable GitHub source " + d.Commit)
+	report("Downloading verified immutable repository source " + d.Commit)
 	token, _ := a.getSecret(p.ID, "GITHUB_TOKEN", "integration")
 	dest := a.sourcePath(*d)
-	if e := download(ctx, "https://api.github.com/repos/"+p.Repository+"/tarball/"+d.Commit, dest, token, 64<<20, report); e != nil {
+	if repositoryProvider(p) == "github" {
+		if e := download(ctx, "https://api.github.com/repos/"+p.Repository+"/tarball/"+d.Commit, dest, token, 64<<20, report); e != nil {
+			return e
+		}
+	} else if e := a.gitArchive(ctx, p, d.Commit, dest, report); e != nil {
 		return e
 	}
 	sum, e := hashFile(dest)
@@ -270,9 +289,9 @@ func (a *App) githubAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 			jsonOut(w, 200, result)
 			return
 		}
-		token, _ := a.getSecret(p.ID, "GITHUB_TOKEN", "integration")
+		token := a.repositoryCredential(p)
 		hook, _ := a.getSecret(p.ID, "WEBHOOK_SECRET", "integration")
-		jsonOut(w, 200, map[string]any{"repository": p.Repository, "privateCredentialSaved": token != "", "webhookConfigured": hook != "", "webhookURL": a.cfg.Origin + "/hooks/github/" + p.ID, "permission": "Fine-grained Contents: read for this repository only; webhooks are configured by its administrator"})
+		jsonOut(w, 200, map[string]any{"repository": p.Repository, "provider": repositoryProvider(p), "externalCredentials": repositoryProvider(p) != "mygit", "privateCredentialSaved": token != "" || repositoryProvider(p) == "mygit", "webhookConfigured": hook != "", "webhookURL": a.cfg.Origin + "/hooks/git/" + p.ID, "message": "My Git uses your linked account permissions automatically. External repositories accept a repository-scoped read token."})
 		return
 	}
 	if !requireAdmin(w, s) {
@@ -290,7 +309,7 @@ func (a *App) githubAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 		return
 	}
 	if len(in.Token) > 500 || strings.ContainsAny(in.Token, "\r\n\x00") {
-		fail(w, 400, errors.New("Invalid GitHub credential"))
+		fail(w, 400, errors.New("Invalid repository credential"))
 		return
 	}
 	if p.Repository == "" {
@@ -298,8 +317,20 @@ func (a *App) githubAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 		return
 	}
 	if in.Token != "" {
-		if e := a.putSecret(p.ID, "GITHUB_TOKEN", "integration", in.Token); e != nil {
-			fail(w, 500, errors.New("Could not protect the GitHub credential"))
+		key := "GITHUB_TOKEN"
+		if repositoryProvider(p) != "github" {
+			key = "REPOSITORY_TOKEN"
+			if e := a.putSecret(p.ID, "REPOSITORY_TOKEN_SCOPE", "integration", p.Repository); e != nil {
+				fail(w, 500, errors.New("Could not protect repository connection"))
+				return
+			}
+		}
+		if repositoryProvider(p) == "mygit" {
+			fail(w, 400, errors.New("My Git access is automatic; no personal token is needed"))
+			return
+		}
+		if e := a.putSecret(p.ID, key, "integration", in.Token); e != nil {
+			fail(w, 500, errors.New("Could not protect the repository credential"))
 			return
 		}
 	}
@@ -321,7 +352,7 @@ func (a *App) githubAPI(w http.ResponseWriter, r *http.Request, s Session, p Pro
 		show = hook
 	}
 	_ = a.store.audit(s.User.ID, p.ID, "github.connected", map[string]any{"repository": repo.FullName, "rotatedWebhook": in.RotateWebhook})
-	jsonOut(w, 200, map[string]string{"repository": repo.FullName, "webhookURL": a.cfg.Origin + "/hooks/github/" + p.ID, "webhookSecret": show, "message": "GitHub repository access verified. Configure a JSON push webhook using this URL and the secret shown once."})
+	jsonOut(w, 200, map[string]string{"repository": repo.FullName, "webhookURL": a.cfg.Origin + "/hooks/git/" + p.ID, "webhookSecret": show, "message": "Repository access verified. Add a JSON push webhook in your Git repository using this URL and the secret shown once."})
 }
 func (a *App) webhook(w http.ResponseWriter, r *http.Request, pid string) {
 	if r.Method != "POST" || !validID.MatchString(pid) {
@@ -342,15 +373,22 @@ func (a *App) webhook(w http.ResponseWriter, r *http.Request, pid string) {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
 	expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-	if !hmac.Equal([]byte(expected), []byte(r.Header.Get("X-Hub-Signature-256"))) {
+	signature := r.Header.Get("X-Hub-Signature-256")
+	eventType := r.Header.Get("X-GitHub-Event")
+	if repositoryProvider(p) != "github" {
+		expected = hex.EncodeToString(mac.Sum(nil))
+		signature = r.Header.Get("X-Gitea-Signature")
+		eventType = r.Header.Get("X-Gitea-Event")
+	}
+	if !hmac.Equal([]byte(expected), []byte(signature)) {
 		fail(w, 401, errors.New("Webhook signature is invalid"))
 		return
 	}
-	if r.Header.Get("X-GitHub-Event") == "ping" {
+	if eventType == "ping" {
 		jsonOut(w, 200, map[string]string{"state": "verified"})
 		return
 	}
-	if r.Header.Get("X-GitHub-Event") != "push" {
+	if eventType != "push" {
 		jsonOut(w, 202, map[string]string{"state": "ignored", "reason": "Only push events trigger deployment"})
 		return
 	}
@@ -362,7 +400,8 @@ func (a *App) webhook(w http.ResponseWriter, r *http.Request, pid string) {
 			FullName string `json:"full_name"`
 		} `json:"repository"`
 	}
-	if e = json.Unmarshal(body, &event); e != nil || !strings.EqualFold(event.Repository.FullName, p.Repository) {
+	loc, locErr := parseRepository(p.Repository, "")
+	if e = json.Unmarshal(body, &event); e != nil || locErr != nil || !strings.EqualFold(event.Repository.FullName, loc.Name) {
 		fail(w, 400, errors.New("Webhook repository does not match this project"))
 		return
 	}

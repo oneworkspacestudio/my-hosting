@@ -14,9 +14,9 @@ import (
 	"time"
 )
 
-const Version = "0.1.0-preview.1"
+const Version = "0.1.0-preview.2"
 
-type Config struct{ Data, Listen, Origin, Issuer, ClientID, ClientSecret, Owner, SiteDomain, SiteTransport, SiteStyle, SiteCFAccount, SiteCFZone, SiteCFTunnel, SiteCFToken string }
+type Config struct{ Data, Listen, Origin, Issuer, ClientID, ClientSecret, Owner, SiteDomain, SiteTransport, SiteStyle, SiteCFAccount, SiteCFZone, SiteCFTunnel, SiteCFToken, GitBase, GitBridgeURL, GitBridgeToken string }
 type User struct {
 	ID      string `json:"id"`
 	Issuer  string `json:"issuer"`
@@ -26,27 +26,30 @@ type User struct {
 	Role    string `json:"role"`
 }
 type Project struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Slug          string   `json:"slug"`
-	Repository    string   `json:"repository"`
-	Branch        string   `json:"branch"`
-	Adapter       string   `json:"adapter"`
-	NodeMajor     int      `json:"nodeMajor"`
-	Install       []string `json:"install"`
-	Build         []string `json:"build"`
-	Start         []string `json:"start"`
-	Output        string   `json:"output"`
-	BaseDirectory string   `json:"baseDirectory"`
-	HealthPath    string   `json:"healthPath"`
-	Timeout       int      `json:"timeout"`
-	MemoryMB      int      `json:"memoryMB"`
-	DiskMB        int      `json:"diskMB"`
-	Previews      bool     `json:"previews"`
-	Trusted       bool     `json:"trusted"`
-	Live          string   `json:"live"`
-	Created       string   `json:"created"`
-	Role          string   `json:"role,omitempty"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Slug           string   `json:"slug"`
+	Repository     string   `json:"repository"`
+	SourceProvider string   `json:"provider,omitempty"`
+	SourceActor    string   `json:"sourceActor,omitempty"`
+	SourceRepoID   int64    `json:"sourceRepoId,omitempty"`
+	Branch         string   `json:"branch"`
+	Adapter        string   `json:"adapter"`
+	NodeMajor      int      `json:"nodeMajor"`
+	Install        []string `json:"install"`
+	Build          []string `json:"build"`
+	Start          []string `json:"start"`
+	Output         string   `json:"output"`
+	BaseDirectory  string   `json:"baseDirectory"`
+	HealthPath     string   `json:"healthPath"`
+	Timeout        int      `json:"timeout"`
+	MemoryMB       int      `json:"memoryMB"`
+	DiskMB         int      `json:"diskMB"`
+	Previews       bool     `json:"previews"`
+	Trusted        bool     `json:"trusted"`
+	Live           string   `json:"live"`
+	Created        string   `json:"created"`
+	Role           string   `json:"role,omitempty"`
 }
 type Deploy struct {
 	ID          string  `json:"id"`
@@ -117,13 +120,16 @@ var validSHA = regexp.MustCompile(`^[a-f0-9]{40}$`)
 var validBranch = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_./-]{0,150}$`)
 
 func cleanRepo(s string) (string, error) {
-	s = strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(s), "/"), ".git")
-	s = strings.TrimPrefix(s, "https://github.com/")
-	if !validRepo.MatchString(s) || strings.Contains(s, "..") {
-		return "", errors.New("Use a GitHub owner/repository or https://github.com/owner/repository URL")
+	loc, e := parseRepository(s, "")
+	if e != nil {
+		return "", e
 	}
-	return s, nil
+	if loc.Provider == "github" {
+		return loc.Name, nil
+	}
+	return loc.URL, nil
 }
+
 func relPath(s string) bool {
 	if s == "." {
 		return true
@@ -131,12 +137,30 @@ func relPath(s string) bool {
 	return s != "" && !filepath.IsAbs(s) && !strings.ContainsAny(s, ":\\\x00") && !strings.HasPrefix(s, "/") && !strings.Contains("/"+s+"/", "/../") && !strings.Contains("/"+s+"/", "/./")
 }
 func (p *Project) validate() error {
+	if p.SourceProvider != "" && p.SourceProvider != "github" && p.SourceProvider != "mygit" && p.SourceProvider != "gitea" {
+		return errors.New("Invalid repository provider")
+	}
 	p.Name = strings.TrimSpace(p.Name)
 	if len(p.Name) < 1 || len(p.Name) > 100 || !validSlug.MatchString(p.Slug) {
 		return errors.New("Enter a project name and a lowercase site name (2–48 letters, numbers or hyphens)")
 	}
 	if p.Repository != "" {
 		r, e := cleanRepo(p.Repository)
+		if p.SourceProvider == "mygit" { // configured broker already canonicalized this managed URL
+			u, err := url.Parse(p.Repository)
+			if err == nil && u.Host != "" {
+				parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+				if len(parts) >= 2 {
+					base := u.Scheme + "://" + u.Host
+					if len(parts) > 2 {
+						base += "/" + strings.Join(parts[:len(parts)-2], "/")
+					}
+					loc, err := parseRepository(p.Repository, base)
+					e = err
+					r = loc.URL
+				}
+			}
+		}
 		if e != nil {
 			return e
 		}

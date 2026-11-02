@@ -156,20 +156,22 @@ export function Project({ data, onAction }: { data: any; onAction: (name: string
             )}
           </Card>
           <Card variant="form">
-            <Heading level={2}>GitHub connection & automatic deploys</Heading>
+            <Heading level={2}>Git connection & automatic deploys</Heading>
             <Text>{data.github.message}</Text>
             <Text variant="caption">{data.github.webhookURL}</Text>
-            <Field label="Fine-grained GitHub token · Contents: read (optional for public repos)"><Input name="githubToken" type="password" autoComplete="off" /></Field>
+            {data.github.externalCredentials && (
+              <Field label="Repository read token (optional for public repositories)"><Input name="githubToken" type="password" autoComplete="off" /></Field>
+            )}
             {data.canAdmin && (
               <Button onClick={() => onAction("connectGitHub")}>Verify repository & configure webhook</Button>
             )}
             {data.webhookSecret && (
               <>
-                <Alert tone="info">Copy this webhook secret into GitHub now. It is shown only once.</Alert>
+                <Alert tone="info">Copy this webhook secret into your Git provider now. It is shown only once.</Alert>
                 <Text variant="code">{data.webhookSecret}</Text>
               </>
             )}
-            <Text variant="caption">In GitHub repository Settings → Webhooks, add the URL above, JSON content type and this secret, selecting Push events. The URL must be reachable from GitHub.</Text>
+            <Text variant="caption">In your repository Settings → Webhooks, add the URL above, JSON content type and this secret, selecting Push events. The URL must be reachable from your Git provider.</Text>
           </Card>
           <Card variant="form">
             <Heading level={2}>Environment variables & secrets</Heading>

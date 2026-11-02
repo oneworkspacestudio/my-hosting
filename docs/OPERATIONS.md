@@ -142,3 +142,21 @@ this preview does not automatically garbage-collect provider DNS on uninstall.
 Changing an existing public namespace/transport is an administrator migration:
 old provider routes are not silently rewritten or deleted. Use the same routing
 settings for routine upgrades. Automated namespace migration is not implemented.
+
+
+## Repository connection
+
+Workspace110 supplies WORKSPACE_GIT_URL and a loopback-only read broker to the
+Hosting control process. The connected account is stored by immutable local user
+ID and MyAccounts issuer/subject; no email-based linking or Git admin credential
+is exposed. Builders receive neither broker credentials nor OIDC client secrets.
+My Git repository IDs are pinned and read access is checked for every source
+request. Revoked accounts and renamed/replaced IDs need a source reconnection.
+External Gitea/Forgejo uses HTTPS, public IP validation at every connection and
+same-origin redirects. Its encrypted read token is bound to that repository URL.
+
+Use name or owner/name for this Workspace's My Git; a full github.com URL selects
+GitHub. Existing saved owner/repo GitHub sources retain their original provider.
+Empty repositories need a first commit. Ambiguous names need owner/name.
+Sources are downloaded at immutable commits (64MiB limit). Explicit historical
+commits must appear within the allowed branch's most recent10,000 commits.

@@ -100,7 +100,11 @@ func (a *App) queueGit(ctx context.Context, p Project, branch, sha, environment,
 	if e != nil {
 		return Deploy{}, e
 	}
-	d, e := a.queued(p, "github", branch, resolved, environment, action, "", key, actor)
+	source := "github"
+	if repositoryProvider(p) != "github" {
+		source = "git"
+	}
+	d, e := a.queued(p, source, branch, resolved, environment, action, "", key, actor)
 	if e == nil && d.State == "queued" {
 		d.Author = author
 		d.Message = message

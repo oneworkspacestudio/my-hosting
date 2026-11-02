@@ -168,6 +168,10 @@ func (a *App) serve(w http.ResponseWriter, r *http.Request) {
 		jsonOut(w, 200, map[string]any{"status": "ok", "version": Version})
 		return
 	}
+	if strings.HasPrefix(path, "/hooks/git/") {
+		a.webhook(w, r, strings.TrimPrefix(path, "/hooks/git/"))
+		return
+	}
 	if strings.HasPrefix(path, "/hooks/github/") {
 		a.webhook(w, r, strings.TrimPrefix(path, "/hooks/github/"))
 		return
@@ -243,6 +247,43 @@ func (a *App) api(w http.ResponseWriter, r *http.Request, s Session, path string
 		jsonOut(w, 200, map[string]any{"user": s.User, "csrf": s.CSRF, "version": Version, "origin": a.cfg.Origin, "publication": a.settings()})
 		return
 	}
+
+	if path == "repositories/resolve" && r.Method == "POST" {
+		if !requireAdmin(w, s) {
+			return
+		}
+		var in struct {
+			Repository string `json:"repository"`
+			Branch     string `json:"branch,omitempty"`
+		}
+		if !readJSON(w, r, &in) {
+			return
+		}
+		result, e := a.resolveRepository(r.Context(), in.Repository, s.User)
+		if e != nil {
+			fail(w, 400, e)
+			return
+		}
+		response := map[string]any{"provider": result.Provider, "repository": result.Repository, "fullName": result.FullName, "defaultBranch": result.DefaultBranch, "private": result.Private, "empty": result.Empty}
+		if result.Provider == "mygit" && !result.Empty {
+			project := Project{Repository: result.Repository, SourceProvider: result.Provider, SourceActor: s.User.ID, SourceRepoID: result.ID, Branch: result.DefaultBranch}
+			if in.Branch != "" {
+				if !validBranch.MatchString(in.Branch) || strings.Contains(in.Branch, "..") {
+					fail(w, 400, errors.New("Invalid production branch"))
+					return
+				}
+				project.Branch = in.Branch
+			}
+			detected, err := a.detectGitHub(r.Context(), project)
+			if err != nil {
+				fail(w, 400, err)
+				return
+			}
+			response["detection"] = detected
+		}
+		jsonOut(w, 200, response)
+		return
+	}
 	if path == "projects" {
 		if r.Method == "GET" {
 			ps, e := a.store.projects(s.User)
@@ -262,6 +303,10 @@ func (a *App) api(w http.ResponseWriter, r *http.Request, s Session, path string
 			p.Live = ""
 			p.Created = now()
 			p.Role = ""
+			if e := a.prepareProjectRepository(r.Context(), &p, s.User, nil); e != nil {
+				fail(w, 400, e)
+				return
+			}
 			if e := p.validate(); e != nil {
 				fail(w, 400, e)
 				return
@@ -338,6 +383,10 @@ func (a *App) api(w http.ResponseWriter, r *http.Request, s Session, path string
 				fail(w, 400, errors.New("Site names are permanent; create a new project to change the preview address"))
 				return
 			}
+			if e = a.prepareProjectRepository(r.Context(), &next, s.User, &p); e != nil {
+				fail(w, 400, e)
+				return
+			}
 			if e = next.validate(); e != nil {
 				fail(w, 400, e)
 				return
@@ -367,7 +416,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request, s Session, path string
 		a.domainAPI(w, r, s, p, parts[3:])
 	case "secrets":
 		a.secretAPI(w, r, s, p)
-	case "github":
+	case "github", "source":
 		a.githubAPI(w, r, s, p, parts[3:])
 	case "members":
 		a.membersAPI(w, r, s, p)

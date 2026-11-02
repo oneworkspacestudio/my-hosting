@@ -27,9 +27,9 @@ export function Create({ data, onAction }: { data: any; onAction: (name: string)
             <Field label="Site name"><Input name="slug" placeholder="my-lovely-website" required={true} /></Field>
             <Text variant="caption">Lowercase letters, numbers and hyphens. Your site name stays the same across deployments.</Text>
             <Text variant="caption">{data.suggestedSiteURL}</Text>
-            <Field label="GitHub repository (optional)"><Input name="repository" placeholder="owner/repository" /></Field>
+            <Field label="Git repository (optional)"><Input name="repository" placeholder="repo-name, owner/repo, or repository URL" /></Field>
             <Field label="Production branch"><Input name="branch" placeholder="main" /></Field>
-            <Text variant="muted">Private repositories can be connected with a protected, fine-grained GitHub credential after creation. For ZIP uploads, leave the repository empty.</Text>
+            <Text variant="muted">My Git uses your Workspace sign-in, including private repositories you can read. Paste a repository name, browser URL or .git URL. For GitHub, use its full URL. Leave empty for ZIP uploads.</Text>
             <Button onClick={() => onAction("createNext")}>Continue to build settings →</Button>
           </>
         )}

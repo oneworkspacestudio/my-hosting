@@ -125,3 +125,40 @@ func TestPreviewRepublishDoesNotPromoteImplicitly(t *testing.T) {
 		}
 	}
 }
+
+func TestSignedMyGitWebhook(t *testing.T) {
+	a := testApp(t)
+	p := testProject(t, a)
+	p.Repository = "https://workspace.example.test/git/alice/site"
+	p.SourceProvider = "mygit"
+	p.Previews = false
+	if e := a.store.saveProject(p); e != nil {
+		t.Fatal(e)
+	}
+	const secret = "synthetic-mygit-hook"
+	if e := a.putSecret(p.ID, "WEBHOOK_SECRET", "integration", secret); e != nil {
+		t.Fatal(e)
+	}
+	body := encode(map[string]any{"ref": "refs/heads/main", "after": strings.Repeat("a", 40), "repository": map[string]string{"full_name": "alice/site"}})
+	send := func(signature string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/hooks/git/"+p.ID, strings.NewReader(body))
+		r.Header.Set("X-Gitea-Signature", signature)
+		r.Header.Set("X-Gitea-Event", "push")
+		w := httptest.NewRecorder()
+		a.webhook(w, r, p.ID)
+		return w
+	}
+	if send("invalid").Code != 401 {
+		t.Fatal("unsigned My Git hook accepted")
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(body))
+	signature := hex.EncodeToString(mac.Sum(nil))
+	first, second := send(signature), send(signature)
+	var d, repeat Deploy
+	_ = json.Unmarshal(first.Body.Bytes(), &d)
+	_ = json.Unmarshal(second.Body.Bytes(), &repeat)
+	if first.Code != 202 || second.Code != 202 || !validID.MatchString(d.ID) || d.ID != repeat.ID {
+		t.Fatal(first.Code, first.Body.String(), second.Body.String())
+	}
+}

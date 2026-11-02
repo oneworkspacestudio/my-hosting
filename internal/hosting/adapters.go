@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -54,12 +55,21 @@ func (a *App) detectGitHub(ctx context.Context, p Project) (map[string]any, erro
 		Content  string `json:"content"`
 		Encoding string `json:"encoding"`
 	}
-	endpoint := "/contents/" + pathFor(p, "package.json") + "?ref=" + p.Branch
+	endpoint := "/contents/" + pathFor(p, "package.json") + "?ref=" + url.QueryEscape(p.Branch)
 	if e := a.githubCall(ctx, p, endpoint, &file); e != nil {
-		return nil, e
+		var status *repositoryHTTPError
+		if !errors.As(e, &status) || status.Status != 404 {
+			return nil, e
+		}
+		// A missing package is a static site only after the branch is verified.
+		var head any
+		if err := a.githubCall(ctx, p, "/commits/"+url.PathEscape(p.Branch), &head); err != nil {
+			return nil, err
+		}
+		return map[string]any{"adapter": "static", "install": []string{}, "build": []string{}, "start": []string{}, "output": ".", "message": "Static files detected. No package installation or build command is needed."}, nil
 	}
 	if file.Encoding != "base64" {
-		return nil, errors.New("GitHub did not return a regular package.json file")
+		return nil, errors.New("Git did not return a regular package.json file")
 	}
 	raw, e := base64.StdEncoding.DecodeString(strings.ReplaceAll(file.Content, "\n", ""))
 	if e != nil {
@@ -70,11 +80,20 @@ func (a *App) detectGitHub(ctx context.Context, p Project) (map[string]any, erro
 		return nil, errors.New("Source package.json is invalid")
 	}
 	adapter := detectPackage(pkg)
-	install := []string{"npm", "ci"}
+	install := []string{"npm", "install", "--include=dev"}
+	var lock any
+	if err := a.githubCall(ctx, p, "/contents/"+pathFor(p, "package-lock.json")+"?ref="+url.QueryEscape(p.Branch), &lock); err == nil {
+		install = []string{"npm", "ci", "--include=dev"}
+	} else {
+		var status *repositoryHTTPError
+		if !errors.As(err, &status) || status.Status != 404 {
+			return nil, err
+		}
+	}
 	build := []string{}
 	start := []string{}
 	output := "dist"
-	message := "Commit a package-lock.json so dependency installation can use npm ci."
+	message := "Review these detected build settings. Commit a package-lock.json for repeatable npm ci installs."
 	if pkg.Scripts["build"] != "" {
 		build = []string{"npm", "run", "build"}
 	}

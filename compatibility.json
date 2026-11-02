@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "application": "my-hosting",
-  "version": "0.1.0-preview.1",
+  "version": "0.1.0-preview.2",
   "platform": "windows-amd64",
-  "minimumWorkspaceVersion": "0.3.0-preview.36",
-  "workspaceInstallerIntegration": 2,
+  "minimumWorkspaceVersion": "0.3.0-preview.110",
+  "workspaceInstallerIntegration": 6,
   "managementPortOffset": 17,
   "route": "/hosting",
   "oidcCallback": "/hosting/auth/callback",
@@ -12,5 +12,8 @@
   "releaseChannel": "preview",
   "securityScope": "trusted-administrators-and-projects",
   "startup": "interactive-user-logon",
-  "scmServiceAccepted": false
+  "scmServiceAccepted": false,
+  "capabilities": [
+    "native-hosting-git-v1"
+  ]
 }

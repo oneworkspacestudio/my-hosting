@@ -109,3 +109,13 @@ Original application and artwork: Apache-2.0. Caddy is a separately managed
 Apache-2.0 dependency; Node and npm have their own included notices. React, Vite,
 AUI compiler, Lucide, SQLite and Go dependencies retain their licences. See
 [NOTICE](NOTICE); the release dependency inventory is generated during packaging.
+
+
+### Deploy from My Git
+
+In One Workspace, enter a repository name such as `fidget-clicker-creator`,
+`owner/repository`, its browser URL, or its HTTPS `.git` clone URL. Hosting uses
+your MyAccounts sign-in and My Git read permissions, including private repos.
+The wizard finds the default branch and suggests build settings before review.
+Use an explicit GitHub URL for GitHub projects; existing projects keep working.
+My Git integration requires Workspace preview110 or later.

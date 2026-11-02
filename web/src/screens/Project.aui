@@ -121,17 +121,18 @@ Page Project
       If condition=$canAdmin
         Button action=saveBuild "Save build settings"
     Card variant=form
-      Heading level=2 "GitHub connection & automatic deploys"
+      Heading level=2 "Git connection & automatic deploys"
       Text $github.message
       Text variant=caption $github.webhookURL
-      Field label="Fine-grained GitHub token · Contents: read (optional for public repos)"
-        Input name=githubToken type=password autoComplete=off
+      If condition=$github.externalCredentials
+        Field label="Repository read token (optional for public repositories)"
+          Input name=githubToken type=password autoComplete=off
       If condition=$canAdmin
         Button action=connectGitHub "Verify repository & configure webhook"
       If condition=$webhookSecret
-        Alert tone=info "Copy this webhook secret into GitHub now. It is shown only once."
+        Alert tone=info "Copy this webhook secret into your Git provider now. It is shown only once."
         Text variant=code $webhookSecret
-      Text variant=caption "In GitHub repository Settings → Webhooks, add the URL above, JSON content type and this secret, selecting Push events. The URL must be reachable from GitHub."
+      Text variant=caption "In your repository Settings → Webhooks, add the URL above, JSON content type and this secret, selecting Push events. The URL must be reachable from your Git provider."
     Card variant=form
       Heading level=2 "Environment variables & secrets"
       Text variant=muted "Values are encrypted on this Windows host and write-only after saving. Each deployment snapshots its environment; logs mask secret values."

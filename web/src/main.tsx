@@ -75,16 +75,36 @@ function Application(){
  })();return()=>{alive=false;};},[user,route,epoch,offset,api]);
  useEffect(()=>{if(!did||!pid||!user)return;setBuildLogs('');setStreamStatus('Connecting to live log…');const events=new EventSource(`${base}/api/projects/${pid}/deployments/${did}/events`);events.onmessage=e=>{try{const x=JSON.parse(e.data);setDeploy(x.deploy);if(x.text)setBuildLogs(s=>(s+x.text).slice(-2*1024*1024));const running=['queued','preparing','uploading','building','publishing'].includes(x.deploy.state);setStreamStatus(running?'Live · updates every second':'Log complete');if(!running)events.close();}catch{setStreamStatus('Log stream needs a refresh');}};events.onerror=()=>setStreamStatus('Reconnecting; check the application if this persists');return()=>events.close();},[did,pid,user]);
  useEffect(()=>{if(routeParts[0]!=='settings'||!user||!globalAdmin)return;const timer=setInterval(()=>api('settings').then(setSettings).catch((e:any)=>setError(e.message)),4000);return()=>clearInterval(timer);},[route,user,globalAdmin,api]);
- const setField=(name:string,value:any)=>setFields(f=>({...f,[name]:value}));
+ const branchEdited=useRef(false);
+ const setField=(name:string,value:any)=>{if(name==='branch')branchEdited.current=true;setFields(f=>({...f,[name]:value}));};
  const readProject=()=>({name:String(fields.name||''),slug:String(fields.slug||''),repository:String(fields.repository||''),branch:String(fields.branch||'main'),adapter:fields.adapter,nodeMajor:Number(fields.nodeMajor),install:parseArgs(fields.install),build:parseArgs(fields.build),start:parseArgs(fields.start),output:fields.output,baseDirectory:fields.baseDirectory||'.',healthPath:fields.healthPath,timeout:Number(fields.timeout),memoryMB:Number(fields.memoryMB),diskMB:Number(fields.diskMB),previews:!!fields.previews,trusted:!!fields.trusted});
  const navigateDeploy=(d:any)=>{setDeploy(d);changeRoute(`project/${pid||d.projectId}/deploy/${d.id}`);};
  const action=async(name:string)=>{
   if(name==='theme'){const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme;localStorage.setItem('myhosting-theme',theme);return;}
   if(name==='notifications'){setNotifications(x=>!x);return;}
   if(name==='home'){changeRoute('projects');return;}
-  if(name==='createProject'){setFields({...defaults});setStep(0);changeRoute('new');return;}
+  if(name==='createProject'){branchEdited.current=false;setFields({...defaults});setStep(0);changeRoute('new');return;}
   if(name==='createBack'){setStep(x=>Math.max(0,x-1));return;}
-  if(name==='createNext'){if(step===0&&(!fields.name||!/^[a-z](?:[a-z0-9-]{0,46}[a-z0-9])$/.test(fields.slug))){setError('Enter a name and a lowercase site name (2–48 letters, numbers or hyphens).');return;}if(step===1){try{readProject();}catch(e:any){setError(e.message);return;}}setError('');setStep(x=>Math.min(2,x+1));return;}
+  if(name==='createNext'){
+   if(busy)return;
+   setError('');
+   try{
+    if(step===0){
+     if(!fields.name||!/^[a-z](?:[a-z0-9-]{0,46}[a-z0-9])$/.test(fields.slug))throw new Error('Enter a name and a lowercase site name (2–48 letters, numbers or hyphens).');
+     if(String(fields.repository||'').trim()){
+      setBusy('Connecting to your repository and checking build settings…');
+      const info=await api('repositories/resolve','POST',{repository:fields.repository,branch:branchEdited.current?fields.branch:''});
+      if(info.empty)throw new Error('This repository is empty. Commit your site files in My Git, then continue.');
+      const d=info.detection;
+      setFields(f=>({...f,repository:info.repository,branch:branchEdited.current?f.branch:info.defaultBranch||f.branch,...(d?{adapter:d.adapter,install:JSON.stringify(d.install),build:JSON.stringify(d.build),start:JSON.stringify(d.start),output:d.output}: {})}));
+      if(d)setNotice(d.message+' Review these settings before creating the project.');
+     }
+    }
+    if(step===1)readProject();
+    setStep(x=>Math.min(2,x+1));
+   }catch(e:any){setError(e.message);}finally{setBusy('');}
+   return;
+  }
   if(name==='triggerDialog'){setShowTrigger(true);setFields(f=>({...f,deployBranch:project?.branch||'main',deployCommit:'',deployEnvironment:'production',clearCache:false}));return;}
   if(name==='closeTrigger'){setShowTrigger(false);return;}
   if(name==='oidcLogin'){sessionStorage.removeItem('myhosting-auth-tried');location.assign(`${base}/auth/login`);return;}
@@ -101,7 +121,7 @@ function Application(){
    if(name==='previousPage'){setOffset(x=>Math.max(0,x-30));return;}
    if(name==='nextPage'){setOffset(x=>x+30);return;}
    if(name==='detectFramework'){const x=await api(`projects/${pid}/github/detect`);setFields(f=>({...f,adapter:x.adapter,install:JSON.stringify(x.install),build:JSON.stringify(x.build),start:JSON.stringify(x.start),output:x.output}));setNotice(x.message+' Review the suggested values, then save.');return;}
-   if(name==='connectGitHub'){const gh=await api(`projects/${pid}/github`,'POST',{token:fields.githubToken||''});setWebhookSecret(gh.webhookSecret||'');setGithub(gh);setField('githubToken','');setNotice('GitHub access verified. Add the signed push webhook in repository Settings to enable automatic deploys.');return;}
+   if(name==='connectGitHub'){const gh=await api(`projects/${pid}/github`,'POST',{token:fields.githubToken||''});setWebhookSecret(gh.webhookSecret||'');setGithub(gh);setField('githubToken','');setGithub(await api(`projects/${pid}/source`));setNotice('Repository access verified. Add the signed push webhook in repository Settings to enable automatic deploys.');return;}
    if(name==='makeCanonical'||name==='clearCanonical'){await api(`projects/${pid}/domains/${selectedDomain.host}/canonical`,'POST',{enabled:name==='makeCanonical'});setNotice('Canonical routing updated and validated.');refresh();return;}
    if(name==='saveSecret'||name==='deleteSecret'){await api(`projects/${pid}/secrets`,name==='saveSecret'?'PUT':'DELETE',{name:fields.secretName,environment:fields.secretEnvironment,value:name==='saveSecret'?fields.secretValue||'':''});setField('secretValue','');setSecrets(await api(`projects/${pid}/secrets`));setNotice('Protected environment updated. Existing deployments keep their saved environment.');return;}
    if(name==='addDomain'){const d=await api(`projects/${pid}/domains`,'POST',{host:fields.domain});changeRoute(`project/${pid}/domains/${d.host}`);return;}
