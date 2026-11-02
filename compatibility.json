@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "application": "my-hosting",
-  "version": "0.1.0-preview.2",
+  "version": "0.1.0-preview.3",
   "platform": "windows-amd64",
   "minimumWorkspaceVersion": "0.3.0-preview.110",
   "workspaceInstallerIntegration": 6,

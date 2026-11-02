@@ -23,3 +23,9 @@ My Git requires Workspace110; standalone GitHub/ZIP paths remain available.
 Existing trusted-project/unsigned-Windows-preview, service-mode, reboot and
 cross-machine recovery limitations remain. Public endpoint/installer delivery
 receipts are recorded separately; these development checks do not claim them.
+
+
+Preview3 also accepts a static directory containing one descriptive .html/.htm
+file without index.html. It copies that page to index.html in the isolated build
+output; the source repository/archive remains unchanged. An existing index is
+preserved; ambiguous, hidden-only and linked entry pages are rejected.

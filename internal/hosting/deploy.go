@@ -313,8 +313,12 @@ func (a *App) execute(d Deploy) {
 				if e != nil {
 					return fmt.Errorf("Build output %s is missing or unsafe", d.Snapshot.Output)
 				}
-				if _, e = os.Stat(filepath.Join(output, "index.html")); e != nil {
-					return errors.New("Static output has no index.html; check the output directory or choose a server adapter for SSR")
+				entry, entryErr := prepareStaticIndex(output)
+				if entryErr != nil {
+					return entryErr
+				}
+				if entry != "" {
+					report("Using " + entry + " as the site home page; the Git source is unchanged")
 				}
 			}
 			d.Bytes, e = treeSize(work)

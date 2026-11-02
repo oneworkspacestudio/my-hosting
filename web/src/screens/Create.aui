@@ -53,7 +53,7 @@ Page Create
         Checkbox name=previews label="Allow preview branches and releases"
       Field label="Source approval"
         Checkbox name=trusted label="I administer and trust this project's source and build scripts."
-      Alert tone=info "Static files need Caddy. Executable builds and Node apps also need a verified Node runtime. Dependencies download on demand; Settings supports verified offline archives."
+      Alert tone=info "Static sites use index.html or a single HTML page with any name. Static files need Caddy. Executable builds and Node apps also need a verified Node runtime. Dependencies download on demand; Settings supports verified offline archives."
       Row
         Button variant=secondary action=createBack "Back"
         Button action=saveNewProject "Create project"

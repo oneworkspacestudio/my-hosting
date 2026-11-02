@@ -113,9 +113,13 @@ AUI compiler, Lucide, SQLite and Go dependencies retain their licences. See
 
 ### Deploy from My Git
 
-In One Workspace, enter a repository name such as `fidget-clicker-creator`,
+In One Workspace, enter a repository name such as `my-website`,
 `owner/repository`, its browser URL, or its HTTPS `.git` clone URL. Hosting uses
 your MyAccounts sign-in and My Git read permissions, including private repos.
 The wizard finds the default branch and suggests build settings before review.
 Use an explicit GitHub URL for GitHub projects; existing projects keep working.
 My Git integration requires Workspace preview110 or later.
+
+A static site can contain `index.html` or one HTML file with any name. Hosting
+uses that single page as the home page without changing the Git repository.
+If there are several pages, add `index.html` to choose the home page explicitly.

@@ -313,3 +313,23 @@ func TestNativeNodeAndControlIsolation(t *testing.T) {
 		t.Fatal(code, body)
 	}
 }
+
+func TestNativeSingleHTMLPublication(t *testing.T) {
+	a := testApp(t)
+	provisionTestRuntime(t, a, "caddy")
+	port, e := freePort()
+	if e != nil {
+		t.Fatal(e)
+	}
+	settings := a.settings()
+	settings.CaddyPort = port
+	_ = a.store.setSetting("hosting", settings)
+	p := testProject(t, a)
+	d := uploadFixture(t, a, p, "production", map[string]string{"custom-export.html": "<h1>Standalone export works</h1>"})
+	if d.State != "published" {
+		t.Fatal(d.State, d.Error)
+	}
+	if code, body := getSite(t, port, a.siteHost(d)); code != 200 || !strings.Contains(body, "Standalone export works") {
+		t.Fatal(code, body)
+	}
+}

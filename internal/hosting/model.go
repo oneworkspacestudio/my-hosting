@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const Version = "0.1.0-preview.2"
+const Version = "0.1.0-preview.3"
 
 type Config struct{ Data, Listen, Origin, Issuer, ClientID, ClientSecret, Owner, SiteDomain, SiteTransport, SiteStyle, SiteCFAccount, SiteCFZone, SiteCFTunnel, SiteCFToken, GitBase, GitBridgeURL, GitBridgeToken string }
 type User struct {

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -186,4 +187,53 @@ func stageFrameworkRelease(work, dest string, p Project) error {
 	// runBuild has closed the complete job (including descendants), and the
 	// caller validated the entire workspace for links before reaching here.
 	return os.RemoveAll(work)
+}
+
+// A standalone exported HTML file is a complete site even when its creator
+// gave it a descriptive filename. Never guess between multiple entry pages.
+func prepareStaticIndex(root string) (string, error) {
+	index := filepath.Join(root, "index.html")
+	if st, e := os.Lstat(index); e == nil {
+		if !st.Mode().IsRegular() {
+			return "", errors.New("Static index.html must be a regular file")
+		}
+		return "", nil
+	} else if !os.IsNotExist(e) {
+		return "", e
+	}
+	entries, e := os.ReadDir(root)
+	if e != nil {
+		return "", e
+	}
+	candidate := ""
+	for _, entry := range entries {
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if !entry.Type().IsRegular() || strings.HasPrefix(entry.Name(), ".") || (ext != ".html" && ext != ".htm") {
+			continue
+		}
+		if candidate != "" {
+			return "", errors.New("Static output has several HTML pages but no index.html; add index.html as the home page or choose a different output directory")
+		}
+		candidate = entry.Name()
+	}
+	if candidate == "" {
+		return "", errors.New("Static output has no HTML home page; add index.html, choose the output directory, or use a server adapter for SSR")
+	}
+	source, e := os.Open(filepath.Join(root, candidate))
+	if e != nil {
+		return "", e
+	}
+	defer source.Close()
+	dest, e := os.OpenFile(index, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if e != nil {
+		return "", e
+	}
+	_, copyErr := io.Copy(dest, source)
+	syncErr := dest.Sync()
+	closeErr := dest.Close()
+	if copyErr != nil || syncErr != nil || closeErr != nil {
+		_ = os.Remove(index)
+		return "", fmt.Errorf("Could not prepare the HTML home page: %v", errors.Join(copyErr, syncErr, closeErr))
+	}
+	return candidate, nil
 }
