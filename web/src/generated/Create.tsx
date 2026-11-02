@@ -56,7 +56,7 @@ export function Create({ data, onAction }: { data: any; onAction: (name: string)
             <Text>{data.createSummary}</Text>
             <Field label="Preview deployments"><Checkbox name="previews" label="Allow preview branches and releases" /></Field>
             <Field label="Source approval"><Checkbox name="trusted" label="I administer and trust this project's source and build scripts." /></Field>
-            <Alert tone="info">Static files need Caddy. Executable builds and Node apps also need a verified Node runtime. Dependencies download on demand; Settings supports verified offline archives.</Alert>
+            <Alert tone="info">Static sites use index.html or a single HTML page with any name. Static files need Caddy. Executable builds and Node apps also need a verified Node runtime. Dependencies download on demand; Settings supports verified offline archives.</Alert>
             <Row>
               <Button variant="secondary" onClick={() => onAction("createBack")}>Back</Button>
               <Button onClick={() => onAction("saveNewProject")}>Create project</Button>
