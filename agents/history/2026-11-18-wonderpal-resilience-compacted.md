@@ -66,3 +66,17 @@ so original C source has not been fast-forwarded; preserve unrelated Nov5
 history. Active source is the isolated I checkout. Synthetic F browser/speech
 fixtures were stopped/removed after verification. Boot task password handoff
 and actual before-Windows-login reboot remain pending.
+
+User authorized C cleanup. Removed old inactive Visual Studio extraction
+packages and regenerable Go/Gradle/npm caches, preserving apps, documents,
+credentials, models and recovery copies. C recovered over10GiB. With capacity
+restored, the exact supported stock140/Hosting2 -> Hosting5 independent upgrade,
+all12 payload hashes, unchanged manager/accounts/owner/exclusions, MyAccounts
+OIDC, complete manager restart and verified rollback to Hosting2 all passed.
+Only a synthetic NTFS test installation was used; it was stopped and removed.
+The earlier capacity-blocked full upgrade/rollback gate is now satisfied
+(managed-cleanup-verification.json). Original C WonderPal checkout fast-forwarded
+to2bc36c5 while preserving the unrelated Nov5 history byte-for-byte and its
+existing private origin. Boot task response requested disk cleanup, not a saved
+task confirmation: owner credential entry and actual before-login reboot
+acceptance remain pending. No owner recovery/rollback was performed as a test.
