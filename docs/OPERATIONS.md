@@ -160,3 +160,24 @@ GitHub. Existing saved owner/repo GitHub sources retain their original provider.
 Empty repositories need a first commit. Ambiguous names need owner/name.
 Sources are downloaded at immutable commits (64MiB limit). Explicit historical
 commits must appear within the allowed branch's most recent10,000 commits.
+
+## Automatic process recovery (preview.4)
+
+Published Node applications restart after exits with a capped 30-second backoff,
+including after more than five exits. One minute of stable running resets the
+backoff. A local health probe runs every10seconds, permits45seconds of initial
+startup and restarts an unresponsive worker after three failures. No permissions
+or runtime downloads are added by probes. Manual stops remain stopped.
+
+The manager restores published applications immediately at startup and retries
+failed restorations even when routing is already running. One project's missing
+or unreadable environment does not prevent other sites from returning. Failed
+restoration retries wait30seconds and audit only the initial failure. Public
+ports/routes, encrypted environments, private data and Job Object ownership stay
+unchanged. All changes are verified with isolated NTFS native fixtures.
+
+The supported Windows startup contract is still the signed-in user's Workspace
+autostart task. This is not an accepted SCM service and does not promise sites
+will run before Windows sign-in, while the PC is off/asleep, or without network
+connectivity. Keep those delivery limits explicit; do not add a SYSTEM task or
+store an owner's Windows password to bypass them.

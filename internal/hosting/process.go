@@ -121,6 +121,9 @@ func (a *App) startNode(ctx context.Context, d *Deploy, env map[string]string, r
 		defer logger.Close()
 		failures := 0
 		backoff := time.Second
+		if a.retryTestDelay > 0 {
+			backoff = a.retryTestDelay
+		}
 		first := true
 		for {
 			if processCtx.Err() != nil {
@@ -131,62 +134,69 @@ func (a *App) startNode(ctx context.Context, d *Deploy, env map[string]string, r
 			cmd.Env = append(safeEnvironment(variable, runtime, port, env), "MYHOSTING_DATA_DIR="+variable)
 			cmd.Stdout = logger
 			cmd.Stderr = logger
+			runStarted := time.Now()
 			j, e := startProcess(cmd, pid, d.Snapshot.MemoryMB, true)
-			if e != nil {
+			if e != nil && first {
+				started <- e
+				return
+			}
+			if e == nil {
+				p.mu.Lock()
+				p.job, p.pid, p.state = j, j.PID(), "running"
+				p.mu.Unlock()
 				if first {
-					started <- e
+					started <- nil
+					first = false
 				}
-				p.mu.Lock()
-				p.state = "failed"
-				p.lastError = e.Error()
-				p.mu.Unlock()
-				return
+				wait := make(chan error, 1)
+				go func() { wait <- j.Wait() }()
+				watchCtx, stopWatch := context.WithCancel(processCtx)
+				unhealthy := a.watchNodeHealth(watchCtx, port, d.Snapshot.HealthPath)
+				select {
+				case <-processCtx.Done():
+					stopWatch()
+					j.Close()
+					<-wait
+					p.mu.Lock()
+					p.state = "stopped"
+					p.mu.Unlock()
+					return
+				case e = <-wait:
+					j.Close()
+				case <-unhealthy:
+					j.Close()
+					<-wait
+					e = errors.New("Process health check failed repeatedly; restarting")
+				}
+				stopWatch()
 			}
-			p.mu.Lock()
-			p.job = j
-			p.pid = j.PID()
-			p.state = "running"
-			p.mu.Unlock()
-			if first {
-				started <- nil
-				first = false
-			}
-			wait := make(chan error, 1)
-			go func() { wait <- j.Wait() }()
-			select {
-			case <-processCtx.Done():
-				j.Close()
-				<-wait
-				p.mu.Lock()
-				p.state = "stopped"
-				p.mu.Unlock()
-				return
-			case e = <-wait:
-				j.Close()
+			if time.Since(runStarted) >= time.Minute {
+				failures = 0
+				backoff = time.Second
 			}
 			failures++
 			p.mu.Lock()
-			p.restarts = failures
+			p.restarts++
 			p.state = "restarting"
-			p.lastError = "Process exited; restarting with backoff"
+			p.lastError = "Process exited; automatically retrying with capped backoff"
 			if e != nil {
 				p.lastError = logger.Redact(e.Error())
 			}
 			p.mu.Unlock()
 			_ = a.store.audit("supervisor", pid, "process.exited", map[string]any{"deploy": did, "attempt": failures})
-			if failures >= 5 {
-				p.mu.Lock()
-				p.state = "crash-loop"
-				p.lastError = "Stopped after five exits. Inspect process logs, fix the start command, then restart."
-				p.mu.Unlock()
-				return
-			}
 			select {
 			case <-processCtx.Done():
 				return
 			case <-time.After(backoff):
 			}
 			backoff *= 2
+			if a.retryTestDelay > 0 {
+				backoff = a.retryTestDelay
+			}
+			if backoff > 30*time.Second {
+				backoff = 30 * time.Second
+			}
+
 		}
 	}()
 	select {
@@ -194,11 +204,13 @@ func (a *App) startNode(ctx context.Context, d *Deploy, env map[string]string, r
 		if e != nil {
 			cancel()
 			<-p.done
+			a.stopNode(d.ID)
 			return e
 		}
 	case <-ctx.Done():
 		cancel()
 		<-p.done
+		a.stopNode(d.ID)
 		return ctx.Err()
 	}
 	healthCtx, healthCancel := context.WithTimeout(ctx, 45*time.Second)
@@ -256,6 +268,7 @@ func waitHealth(ctx context.Context, raw, host, deploy string) error {
 	}
 }
 func (a *App) supervise() {
+	a.superviseRouting()
 	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 	for {
@@ -278,10 +291,23 @@ func (a *App) superviseRouting() {
 	a.processMu.Lock()
 	caddy := a.caddy
 	a.processMu.Unlock()
+	a.publishMu.Lock()
+	defer a.publishMu.Unlock()
 	if caddy == nil {
-		a.publishMu.Lock()
-		defer a.publishMu.Unlock()
 		_ = a.reloadRoutes(a.ctx, nil)
+	} else {
+		// Reload only when the process inventory changed: ordinary health ticks
+		// must not repeatedly reconfigure healthy sites.
+		a.processMu.Lock()
+		before := len(a.processes)
+		a.processMu.Unlock()
+		_ = a.restoreProcesses(a.ctx)
+		a.processMu.Lock()
+		changed := len(a.processes) != before
+		a.processMu.Unlock()
+		if changed {
+			_ = a.reloadRoutes(a.ctx, nil)
+		}
 	}
 }
 func (a *App) restoreProcesses(ctx context.Context) error {
@@ -317,20 +343,34 @@ func (a *App) restoreProcesses(ctx context.Context) error {
 		}
 		a.processMu.Lock()
 		existing := a.processes[d.ID]
+		nextRestore := a.restoreAfter[d.ID]
 		a.processMu.Unlock()
-		if existing != nil {
+		if existing != nil || time.Now().Before(nextRestore) {
 			continue
 		}
 		env, e := a.deployEnv(d)
+		if e == nil {
+			e = a.startNode(ctx, &d, env, func(string) {})
+		}
+		if e == nil {
+			e = a.store.saveDeploy(d)
+		}
 		if e != nil {
-			return e
+			a.stopNode(d.ID)
+			a.processMu.Lock()
+			if a.restoreAfter == nil {
+				a.restoreAfter = map[string]time.Time{}
+			}
+			a.restoreAfter[d.ID] = time.Now().Add(30 * time.Second)
+			a.processMu.Unlock()
+			if nextRestore.IsZero() {
+				_ = a.store.audit("supervisor", d.ProjectID, "process.restore-failed", map[string]string{"deploy": d.ID, "reason": "Published process could not start; automatic recovery will retry"})
+			}
+			continue
 		}
-		if e = a.startNode(ctx, &d, env, func(string) {}); e != nil {
-			return e
-		}
-		if e = a.store.saveDeploy(d); e != nil {
-			return e
-		}
+		a.processMu.Lock()
+		delete(a.restoreAfter, d.ID)
+		a.processMu.Unlock()
 	}
 	return nil
 }

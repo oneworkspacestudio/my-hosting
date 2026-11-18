@@ -1,6 +1,6 @@
 {
   "name": "@oneworkspacestudio/my-hosting",
-  "version": "0.1.0-preview.3",
+  "version": "0.1.0-preview.4",
   "private": true,
   "type": "module",
   "scripts": {

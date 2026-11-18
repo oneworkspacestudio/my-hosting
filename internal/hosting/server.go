@@ -43,12 +43,15 @@ type App struct {
 	publishMu      sync.Mutex
 	processMu      sync.Mutex
 	processes      map[string]*managedProcess
+	restoreAfter   map[string]time.Time
 	caddy          *ProcessJob
 	caddyError     string
 	caddyDone      chan struct{}
 	caddyAdminPort int
 	runtime        *runtimeManager
 	lock           *os.File
+	// Native tests shorten probe timing without exposing a runtime setting.
+	healthTestInterval, healthTestGrace, retryTestDelay time.Duration
 }
 
 func New(ctx context.Context, cfg Config, web fs.FS) (*App, error) {
