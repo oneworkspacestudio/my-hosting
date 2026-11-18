@@ -22,3 +22,9 @@ stop/restart, complete manager/store/router reopen with preserved data and a
 broken peer project, runtime ACL recovery, WebSocket restart, cancellation and
 control isolation. Latest final validation, release/channel, managed installation
 and PC2 delivery are still to record. All test data are synthetic.
+
+Managed stock140 setup revealed that the preview4 manifest inherited an older
+four-file package map while stock140 tracks14 Hosting payloads. The planner
+correctly rejected it before changes. Preview4 assets remain immutable; preview5
+reissues the same tested runtime with all14 existing package IDs and a matched
+source version. Preview4 must be withheld from the update channel.
